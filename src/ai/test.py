@@ -23,9 +23,9 @@ def evaluate_model(test_data, model: Model):
 
     # Confusion Matrix
     conf_matrix = confusion_matrix(all_labels, all_predictions)
-    print("Confusion Matrix:")
+    print("\nConfusion Matrix:")
     print(conf_matrix)
 
     # Mean Absolute Error
     mae = mean_absolute_error(all_labels, all_predictions)
-    print(f"Mean Absolute Error: {mae:.4f}")
+    print(f"\nMean Absolute Error: {mae:.4f}")

@@ -9,18 +9,45 @@ from torchvision import transforms
 from torch import save, load
 from torch.utils.tensorboard.writer import SummaryWriter
 
+from utils import prompt_user
+
 import os
 
 BASE_DIR = os.path.abspath(os.path.dirname(os.getcwd()))
 LOG_DIR = os.path.abspath(os.path.join(BASE_DIR, "logs"))
 MODEL_DIR = os.path.abspath(os.path.join(BASE_DIR, "models"))
 OUTPUT_DIR = os.path.abspath(os.path.join(BASE_DIR, "out"))
-DATA_PATH = os.path.abspath(os.path.join(BASE_DIR, "data"))
-TRAIN_PATH = os.path.abspath(os.path.join(DATA_PATH, "train"))
-TEST_PATH = os.path.abspath(os.path.join(DATA_PATH, "test"))
+DATA_DIR = os.path.abspath(os.path.join(BASE_DIR, "data"))
+TRAIN_PATH = os.path.abspath(os.path.join(DATA_DIR, "train"))
+TEST_PATH = os.path.abspath(os.path.join(DATA_DIR, "test"))
+
+MODEL_FILE = "mnist_model.pth"
+MODEL_PATH = os.path.abspath(os.path.join(MODEL_DIR, MODEL_FILE))
+
+# Ensure necessary directories exist
+os.makedirs(LOG_DIR, exist_ok=True)
+os.makedirs(MODEL_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+def train_model(transform, model: Model, trainer: Trainer):
+    # Loading the data
+    train_dataset = MNIST(DATA_DIR, train=True, download=True, transform=transform)
+    val_dataset = MNIST(DATA_DIR, train=False, download=True, transform=transform)
+    
+    # print(train_dataset.classes)
+    # print(val_dataset.classes)
+
+    # Create the data loaders
+    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
+
+    trainer.fit(model=model, train_data=train_loader, val_data=val_loader)
+
+    # Save the model
+    save(model.state_dict(), os.path.join(MODEL_DIR, MODEL_FILE))
 
 def load_model(model: Model):
-    state_dict = load(os.path.abspath(os.path.join(MODEL_DIR, "mnist_model.pth")), map_location="cpu", weights_only=True)
+    state_dict = load(MODEL_PATH, map_location="cpu", weights_only=True)
     
     model.load_state_dict(state_dict=state_dict)
 
@@ -32,30 +59,12 @@ def load_model(model: Model):
     
     return model
 
-def train_model(transform, model: Model, trainer: Trainer):
-    # Loading the data
-    train_dataset = MNIST(DATA_PATH, train=True, download=True, transform=transform)
-    val_dataset = MNIST(DATA_PATH, train=False, download=True, transform=transform)
-    
-    # print(DATA_PATH)
-    # print(train_dataset.classes)
-    # print(val_dataset.classes)
-
-    # Create the data loaders
-    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
-
-    trainer.fit(model=model, train_data=train_loader, val_data=val_loader)
-
-    # Save the model
-    save(model.state_dict(), os.path.abspath(os.path.join(MODEL_DIR, "mnist_model.pth")))
-
 def test_model(transform, model: Model, trainer: Trainer):
     # for name, param in model.named_parameters():
     #     print(f"Parameter {name} device: {param.device}")
 
     # Loading the data
-    test_dataset = MNIST(DATA_PATH, train=False, download=True, transform=transform)
+    test_dataset = MNIST(DATA_DIR, train=False, download=True, transform=transform)
 
     # Create the data loaders
     test_loader = DataLoader(test_dataset, batch_size=100, shuffle=False)
@@ -92,22 +101,14 @@ def main() -> int:
     # Create the trainer
     trainer = Trainer(n_epochs=10, lr=0.001, device=model.device, writer=writer)
 
-    # Ask user if they want to train a new model or load an existing one
-    user_choice = input("Do you want to train a new model or load an existing one? (train/load): ")
-
-    if user_choice.lower() == "train":
-        # Train the model
-        train_model(transform=transform, model=model, trainer=trainer)
-    elif user_choice.lower() == "load":
-        # Load the model
-        if os.path.exists("mnist_model.pth"):
-            model = load_model(model)
-        else:
-            print("No saved model found. Training a new model.")
+    match prompt_user(model_path=MODEL_PATH):
+        case 0:
+            # Train the model
             train_model(transform=transform, model=model, trainer=trainer)
-    else:
-        print("Invalid choice. Training a new model.")
-        train_model(transform=transform, model=model, trainer=trainer)
+        case 1:
+            model = load_model(model)
+        case _:
+            pass
 
     # Test the model
     test_model(transform=transform, model=model, trainer=trainer)
