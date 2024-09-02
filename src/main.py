@@ -1,11 +1,10 @@
 from ai.model import Model, Layer, nn
 from ai.train import Trainer
-from ai.data import Dataset, DataLoader, MNIST
+from ai.data import ImageDataset
 from ai.utils import check_cuda
 from ai.visualizer import visualize_results
 from ai.test import evaluate_model
 
-from torchvision import transforms
 from torch import save, load
 from torch.utils.tensorboard.writer import SummaryWriter
 
@@ -31,17 +30,17 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 def train_model(transform, model: Model, trainer: Trainer):
     # Loading the data
-    train_dataset = MNIST(DATA_DIR, train=True, download=True, transform=transform)
-    val_dataset = MNIST(DATA_DIR, train=False, download=True, transform=transform)
+    # train_dataset = MNIST(DATA_DIR, train=True, download=True, transform=transform)
+    # val_dataset = MNIST(DATA_DIR, train=False, download=True, transform=transform)
     
     # print(train_dataset.classes)
     # print(val_dataset.classes)
 
     # Create the data loaders
-    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
+    # train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+    # val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
 
-    trainer.fit(model=model, train_data=train_loader, val_data=val_loader)
+    # trainer.fit(model=model, train_data=train_loader, val_data=val_loader)
 
     # Save the model
     save(model.state_dict(), os.path.join(MODEL_DIR, MODEL_FILE))
@@ -60,19 +59,20 @@ def load_model(model: Model):
     return model
 
 def test_model(transform, model: Model, trainer: Trainer):
+    pass
     # for name, param in model.named_parameters():
     #     print(f"Parameter {name} device: {param.device}")
 
     # Loading the data
-    test_dataset = MNIST(DATA_DIR, train=False, download=True, transform=transform)
+    # test_dataset = MNIST(DATA_DIR, train=False, download=True, transform=transform)
 
     # Create the data loaders
-    test_loader = DataLoader(test_dataset, batch_size=100, shuffle=False)
+    # test_loader = DataLoader(test_dataset, batch_size=100, shuffle=False)
 
-    evaluate_model(test_data=test_loader, model=model)
+    # evaluate_model(test_data=test_loader, model=model)
 
-    # Visualize some results
-    visualize_results(test_dataset, model, OUTPUT_DIR, num_samples=10)
+    # # Visualize some results
+    # visualize_results(test_dataset, model, OUTPUT_DIR, num_samples=10)
 
 def main() -> int:
     check_cuda()
@@ -81,9 +81,6 @@ def main() -> int:
 
     input_size = 1 * 28 * 28
     output_size = 10
-
-    transform = transforms.Compose([transforms.ToTensor(), 
-                                    transforms.Normalize((0.5,), (0.5,))])
 
     network_layers : list[Layer] = [
         Layer("flatten", nn.Flatten()),
@@ -101,17 +98,19 @@ def main() -> int:
     # Create the trainer
     trainer = Trainer(n_epochs=10, lr=0.001, device=model.device, writer=writer)
 
-    match prompt_user(model_path=MODEL_PATH):
-        case 0:
-            # Train the model
-            train_model(transform=transform, model=model, trainer=trainer)
-        case 1:
-            model = load_model(model)
-        case _:
-            pass
+    dataset = ImageDataset
 
-    # Test the model
-    test_model(transform=transform, model=model, trainer=trainer)
+    # match prompt_user(model_path=MODEL_PATH):
+    #     case 0:
+    #         # Train the model
+    #         train_model(transform=transform, model=model, trainer=trainer)
+    #     case 1:
+    #         model = load_model(model)
+    #     case _:
+    #         pass
+
+    # # Test the model
+    # test_model(transform=transform, model=model, trainer=trainer)
 
     return 0
 
