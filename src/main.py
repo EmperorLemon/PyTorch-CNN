@@ -1,94 +1,53 @@
 from ai.model import Model, Layer, nn
 from ai.train import Trainer
 from ai.data import ImageDataset
-from ai.utils import check_cuda
+from ai.utils import check_cuda, load_model
 from ai.visualizer import visualize_results
 from ai.test import evaluate_model
 
-from torch import save, load
 from torch.utils.tensorboard.writer import SummaryWriter
 
+from typing import List
+
 from utils import prompt_user
+from globals import *
 
-import os
+def train_model(model: Model, trainer: Trainer, train_loader, val_loader):
+    trainer.fit(model=model, train_loader=train_loader, val_loader=val_loader)
 
-BASE_DIR = os.path.abspath(os.path.dirname(os.getcwd()))
-LOG_DIR = os.path.abspath(os.path.join(BASE_DIR, "logs"))
-MODEL_DIR = os.path.abspath(os.path.join(BASE_DIR, "models"))
-OUTPUT_DIR = os.path.abspath(os.path.join(BASE_DIR, "out"))
-DATA_DIR = os.path.abspath(os.path.join(BASE_DIR, "data"))
-TRAIN_PATH = os.path.abspath(os.path.join(DATA_DIR, "train"))
-TEST_PATH = os.path.abspath(os.path.join(DATA_DIR, "test"))
-
-MODEL_FILE = "mnist_model.pth"
-MODEL_PATH = os.path.abspath(os.path.join(MODEL_DIR, MODEL_FILE))
-
-# Ensure necessary directories exist
-os.makedirs(LOG_DIR, exist_ok=True)
-os.makedirs(MODEL_DIR, exist_ok=True)
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-def train_model(transform, model: Model, trainer: Trainer):
-    # Loading the data
-    # train_dataset = MNIST(DATA_DIR, train=True, download=True, transform=transform)
-    # val_dataset = MNIST(DATA_DIR, train=False, download=True, transform=transform)
-    
-    # print(train_dataset.classes)
-    # print(val_dataset.classes)
-
-    # Create the data loaders
-    # train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-    # val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
-
-    # trainer.fit(model=model, train_data=train_loader, val_data=val_loader)
-
-    # Save the model
-    save(model.state_dict(), os.path.join(MODEL_DIR, MODEL_FILE))
-
-def load_model(model: Model):
-    state_dict = load(MODEL_PATH, map_location="cpu", weights_only=True)
-    
-    model.load_state_dict(state_dict=state_dict)
-
-    model = model.to(model.device)
-    
-    model.eval()
-    
-    # print(f"Model loaded from mnist_model.pth and moved to {model.device}")
-    
-    return model
-
-def test_model(transform, model: Model, trainer: Trainer):
-    pass
+def test_model(model: Model, test_loader, class_names: List[str]):
     # for name, param in model.named_parameters():
     #     print(f"Parameter {name} device: {param.device}")
 
-    # Loading the data
-    # test_dataset = MNIST(DATA_DIR, train=False, download=True, transform=transform)
+    evaluate_model(test_loader=test_loader, model=model)
 
-    # Create the data loaders
-    # test_loader = DataLoader(test_dataset, batch_size=100, shuffle=False)
-
-    # evaluate_model(test_data=test_loader, model=model)
-
-    # # Visualize some results
-    # visualize_results(test_dataset, model, OUTPUT_DIR, num_samples=10)
+    # Visualize some results
+    visualize_results(test_loader, model, OUTPUT_DIR, class_names=class_names, num_samples=10)
 
 def main() -> int:
     check_cuda()
 
     writer = SummaryWriter(LOG_DIR)
 
-    input_size = 1 * 28 * 28
-    output_size = 10
+    # Load the dataset
+    dataset = ImageDataset(FASHION_DATA_DIR, img_size=224, use_augmentation=True)
+    train_loader, val_loader, test_loader = dataset.get_dataloaders()
+
+    input_size = 224 * 224 * 3
+    output_size = len(dataset.class_names)
 
     network_layers : list[Layer] = [
         Layer("flatten", nn.Flatten()),
-        Layer("fc1", nn.Linear(input_size, 64)),
+        Layer("fc1", nn.Linear(input_size, 1024)),
         Layer("relu1", nn.ReLU()),
-        Layer("fc2", nn.Linear(64, 32)),
+        Layer("drop1", nn.Dropout(0.5)),
+        Layer("fc2", nn.Linear(1024, 512)),
         Layer("relu2", nn.ReLU()),
-        Layer("fc3", nn.Linear(32, output_size))
+        Layer("drop2", nn.Dropout(0.5)),
+        Layer("fc3", nn.Linear(512, 256)),
+        Layer("relu3", nn.ReLU()),
+        Layer("drop3", nn.Dropout(0.5)),
+        Layer("fc4", nn.Linear(256, output_size))
     ]
 
     # Create the model
@@ -96,21 +55,21 @@ def main() -> int:
     print(f"Model created with device: {model.device}")
 
     # Create the trainer
-    trainer = Trainer(n_epochs=10, lr=0.001, device=model.device, writer=writer)
+    trainer = Trainer(n_epochs=100, lr=1e-3, weight_decay=1e-4, device=model.device, writer=writer)
 
-    dataset = ImageDataset
+    match prompt_user(model_path=MODEL_PATH):
+        case 0:
+            # Train the model
+            train_model(model=model, trainer=trainer, train_loader=train_loader, val_loader=val_loader)
+        case 1:
+            model = load_model(model)
+        case _:
+            pass
 
-    # match prompt_user(model_path=MODEL_PATH):
-    #     case 0:
-    #         # Train the model
-    #         train_model(transform=transform, model=model, trainer=trainer)
-    #     case 1:
-    #         model = load_model(model)
-    #     case _:
-    #         pass
+    # Test the model
+    test_model(model=model, test_loader=test_loader, class_names=dataset.class_names)
 
-    # # Test the model
-    # test_model(transform=transform, model=model, trainer=trainer)
+    writer.close()
 
     return 0
 

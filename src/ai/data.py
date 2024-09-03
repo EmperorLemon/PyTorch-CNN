@@ -1,23 +1,93 @@
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 
-from torchvision import transforms, datasets
+from torchvision import datasets, transforms
+
+import numpy as np
 
 import os
+import logging
 
 class ImageDataset(Dataset):
-    def __init__(self, root_dir : str):
+    def __init__(self, 
+                 root_dir : str, 
+                 img_size: int = 224, 
+                 mean: list = [0.485, 0.456, 0.406],
+                 std: list = [0.229, 0.224, 0.225],
+                 use_augmentation: bool = True):
+        
         self.train_dir = os.path.join(root_dir, "train")
         self.valid_dir = os.path.join(root_dir, "valid")
         self.test_dir = os.path.join(root_dir, "test")
 
+        self.img_size = img_size
+        self.mean = mean
+        self.std = std
+
         self.transform = transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(), 
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # ImageNet normalization
+            transforms.Resize((self.img_size, self.img_size)),
+            transforms.Pad(0),
+            transforms.CenterCrop((self.img_size, self.img_size)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=self.mean, std=self.std)
         ])
 
-        print(self.train_dir)
-        print(self.valid_dir)
-        print(self.test_dir)
+        logging.info(f"Train directory: {self.train_dir}")
+        logging.info(f"Validation directory: {self.valid_dir}")
+        logging.info(f"Test directory: {self.test_dir}")
 
-        #self.train_dataset = datasets.ImageFolder()
+        for dir_path in [self.train_dir, self.valid_dir, self.test_dir]:
+            if not os.path.exists(dir_path):
+                raise FileNotFoundError(f"Directory not found: {dir_path}")
+        
+        self.train_dataset = datasets.ImageFolder(self.train_dir, transform=self.transform)
+        self.valid_dataset = datasets.ImageFolder(self.valid_dir, transform=self.transform)
+        self.test_dataset = datasets.ImageFolder(self.test_dir, transform=self.transform)
+
+        self.class_names = self.train_dataset.classes
+
+        logging.info(f"Number of classes: {len(self.class_names)}")
+        logging.info(f"Class names: {self.class_names}")
+
+    def get_dataloaders(self, batch_size=32, num_workers=4):
+        train_loader = DataLoader(self.train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+        val_loader = DataLoader(self.valid_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+        test_loader = DataLoader(self.test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+
+        self.diagnose_dataset(train_loader=train_loader)
+        self.print_dataset_info(train_loader=train_loader, val_loader=val_loader)
+
+        return train_loader, val_loader, test_loader
+    
+    def diagnose_dataset(self, train_loader):
+        # Check class distribution
+        train_labels = []
+        for _, labels in train_loader:
+            train_labels.extend(labels.numpy())
+        
+        unique, counts = np.unique(train_labels, return_counts=True)
+        print("Class distribution in training set:")
+        for class_idx, count in zip(unique, counts):
+            print(f"Class {class_idx}: {count}")
+
+        print(self.class_names)
+
+    def print_dataset_info(self, train_loader, val_loader):
+        train_samples = len(train_loader.dataset)
+        val_samples = len(val_loader.dataset)
+        batch_size = train_loader.batch_size
+        train_batches = len(train_loader)
+        val_batches = len(val_loader)
+
+        print(f"Training samples: {train_samples}")
+        print(f"Validation samples: {val_samples}")
+        print(f"Batch size: {batch_size}")
+        print(f"Number of training batches: {train_batches}")
+        print(f"Number of validation batches: {val_batches}")
+
+        # Print class distribution
+        if hasattr(train_loader.dataset, 'targets'):
+            from collections import Counter
+            class_distribution = Counter(train_loader.dataset.targets)
+            print("\nClass distribution in training set:")
+            for class_idx, count in class_distribution.items():
+                print(f"Class {class_idx}: {count}")

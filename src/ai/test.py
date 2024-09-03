@@ -5,13 +5,13 @@ from sklearn.metrics import confusion_matrix, mean_absolute_error
 
 import numpy as np
 
-def evaluate_model(test_data, model: Model):
+def evaluate_model(test_loader, model: Model):
     all_predictions = []
     all_labels = []
 
     model.eval()
     with no_grad():
-        for images, labels in test_data:
+        for images, labels in test_loader:
             images = images.to(model.device)
             outputs = model(images)
             _, predicted = max(outputs, 1)
