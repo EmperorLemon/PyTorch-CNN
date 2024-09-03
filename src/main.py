@@ -64,8 +64,8 @@ def main() -> int:
                       lr=hyperparameters.get("learning_rate"), 
                       weight_decay=hyperparameters.get("weight_decay"), device=model.device, writer=writer)
 
-    # train_model(model=model, trainer=trainer, train_loader=train_loader, val_loader=val_loader)
-    model = load_model(model)
+    train_model(model=model, trainer=trainer, train_loader=train_loader, val_loader=val_loader)
+    # model = load_model(model)
 
     # match prompt_user(model_path=MODEL_PATH):
     #     case 0:

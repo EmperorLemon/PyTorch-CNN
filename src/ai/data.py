@@ -2,7 +2,7 @@ from torch.utils.data import Dataset, DataLoader
 
 from torchvision import datasets, transforms
 
-import numpy as np
+from collections import Counter
 
 import os
 import logging
@@ -60,12 +60,18 @@ class ImageDataset(Dataset):
         for _, labels in train_loader:
             train_labels.extend(labels.numpy())
         
-        unique, counts = np.unique(train_labels, return_counts=True)
+        # Count occurrences of each class
+        label_counts = Counter(train_labels)
+        
         print("Class distribution in training set:")
-        for class_idx, count in zip(unique, counts):
-            print(f"Class {class_idx}: {count}")
+        for class_idx, class_name in enumerate(self.class_names):
+            count = label_counts.get(class_idx, 0)  # Get count, default to 0 if class not present
+            print(f"Class {class_idx} ({class_name}): {count}")
 
-        print(self.class_names)
+        # If you want to create a list of tuples with (class_index, class_name, count):
+        class_info = [(idx, name, label_counts.get(idx, 0)) for idx, name in enumerate(self.class_names)]
+
+        return class_info
 
     def print_dataset_info(self, train_loader, val_loader):
         train_samples = len(train_loader.dataset)
@@ -74,7 +80,7 @@ class ImageDataset(Dataset):
         train_batches = len(train_loader)
         val_batches = len(val_loader)
 
-        print(f"Training samples: {train_samples}")
+        print(f"\nTraining samples: {train_samples}")
         print(f"Validation samples: {val_samples}")
         print(f"Batch size: {batch_size}")
         print(f"Number of training batches: {train_batches}")
