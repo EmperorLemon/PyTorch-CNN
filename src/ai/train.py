@@ -51,7 +51,15 @@ class Trainer():
     ## Optimization algorithm
     def configure_optimizers(self, model_params):
         optimizer = optim.Adam(params=model_params, lr=self.lr, weight_decay=self.weight_decay)
-        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer=optimizer, mode='min', factor=0.1, patience=self.patience)
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer=optimizer, 
+                                                         mode='min', 
+                                                         factor=0.5, 
+                                                         patience=self.patience,
+                                                         threshold=0.01,
+                                                         threshold_mode='rel',
+                                                         cooldown=0,
+                                                         min_lr=1e-6,
+                                                         verbose=True)
 
         return optimizer, scheduler
 

@@ -16,7 +16,7 @@ from globals import *
 def train_model(model: Model, trainer: Trainer, train_loader, val_loader):
     trainer.fit(model=model, train_loader=train_loader, val_loader=val_loader)
 
-    save_model(model=model)
+    # save_model(model=model)
 
 def test_model(model: Model, dataset, test_loader):
     # for name, param in model.named_parameters():
@@ -26,7 +26,7 @@ def test_model(model: Model, dataset, test_loader):
     evaluate_model(dataset=dataset, test_loader=test_loader, model=model)
 
     # Visualize some results
-    visualize_results(dataset=dataset, test_loader=test_loader, model=model, output_dir=OUTPUT_DIR, num_samples=5)
+    visualize_results(dataset=dataset, test_loader=test_loader, model=model, output_dir=OUTPUT_DIR, num_samples=10)
 
 def main() -> int:
     check_cuda()
@@ -64,8 +64,8 @@ def main() -> int:
                       lr=hyperparameters.get("learning_rate"), 
                       weight_decay=hyperparameters.get("weight_decay"), device=model.device, writer=writer)
 
-    train_model(model=model, trainer=trainer, train_loader=train_loader, val_loader=val_loader)
-    # model = load_model(model)
+    # train_model(model=model, trainer=trainer, train_loader=train_loader, val_loader=val_loader)
+    model = load_model(model)
 
     # match prompt_user(model_path=MODEL_PATH):
     #     case 0:
