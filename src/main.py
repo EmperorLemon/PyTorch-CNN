@@ -57,7 +57,6 @@ def main() -> int:
 
     # Create the model
     model = Model(network_layers)
-    print(f"\nModel created with device: {model.device}\n")
 
     # Create the trainer
     trainer = Trainer(n_epochs=hyperparameters.get("num_epochs"), 

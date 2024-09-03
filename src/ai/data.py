@@ -82,6 +82,6 @@ class ImageDataset(Dataset):
 
         print(f"\nTraining samples: {train_samples}")
         print(f"Validation samples: {val_samples}")
-        print(f"Batch size: {batch_size}")
+        print(f"\nBatch size: {batch_size}")
         print(f"Number of training batches: {train_batches}")
-        print(f"Number of validation batches: {val_batches}")
+        print(f"Number of validation batches: {val_batches}\n")
