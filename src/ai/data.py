@@ -31,10 +31,6 @@ class ImageDataset(Dataset):
             transforms.Normalize(mean=self.mean, std=self.std)
         ])
 
-        logging.info(f"Train directory: {self.train_dir}")
-        logging.info(f"Validation directory: {self.valid_dir}")
-        logging.info(f"Test directory: {self.test_dir}")
-
         for dir_path in [self.train_dir, self.valid_dir, self.test_dir]:
             if not os.path.exists(dir_path):
                 raise FileNotFoundError(f"Directory not found: {dir_path}")
@@ -83,11 +79,3 @@ class ImageDataset(Dataset):
         print(f"Batch size: {batch_size}")
         print(f"Number of training batches: {train_batches}")
         print(f"Number of validation batches: {val_batches}")
-
-        # Print class distribution
-        if hasattr(train_loader.dataset, 'targets'):
-            from collections import Counter
-            class_distribution = Counter(train_loader.dataset.targets)
-            print("\nClass distribution in training set:")
-            for class_idx, count in class_distribution.items():
-                print(f"Class {class_idx}: {count}")

@@ -30,7 +30,7 @@ class Trainer():
     def __init__(self, 
                  n_epochs : int,
                  loss_fn: Type[nn.Module] = nn.CrossEntropyLoss,
-                 lr: float = 0.1,
+                 lr: float = 1e-3,
                  weight_decay: float = 1e-4,
                  patience: int = 5,
                  min_delta: float = 1e-4,
@@ -72,10 +72,11 @@ class Trainer():
             train_loss = self.fit_epoch()
             val_loss, val_accuracy = self.validate()
 
-            # Log to TensorBoard
-            self.writer.add_scalar("Loss/Train", train_loss, epoch)
-            self.writer.add_scalar("Loss/Validation", val_loss, epoch)
-            self.writer.add_scalar("Accuracy/Validation", val_accuracy, epoch)
+            if self.writer is not None:
+                # Log to TensorBoard
+                self.writer.add_scalar("Loss/Train", train_loss, epoch)
+                self.writer.add_scalar("Loss/Validation", val_loss, epoch)
+                self.writer.add_scalar("Accuracy/Validation", val_accuracy, epoch)
             
             print(f"Epoch {epoch+1}/{self.max_epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Val Accuracy: {val_accuracy:.2f}%\n")
 
@@ -84,8 +85,8 @@ class Trainer():
 
             # Save best model
             if val_loss < best_val_loss:
-                save_model(model=self.model)
-                print(f"New best model saved at epoch {epoch+1}")
+                # save_model(model=self.model)
+                # print(f"New best model saved at epoch {epoch+1}")
                 best_val_loss = val_loss
 
             self.early_stopper(val_loss=val_loss)
@@ -128,7 +129,7 @@ class Trainer():
             # Update progress bar
             progress_bar.set_postfix({'loss': f'{loss.item():.4f}'})
         
-        return total_loss / num_batches if num_batches != 0 else None
+        return total_loss / num_batches
     
     def validate(self):
         self.model.eval()
