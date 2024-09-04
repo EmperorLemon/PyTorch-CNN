@@ -35,9 +35,9 @@ class ImageDataset(Dataset):
             if not os.path.exists(dir_path):
                 raise FileNotFoundError(f"Directory not found: {dir_path}")
         
-        self.train_dataset = datasets.ImageFolder(self.train_dir, transform=self.transform)
-        self.valid_dataset = datasets.ImageFolder(self.valid_dir, transform=self.transform)
-        self.test_dataset = datasets.ImageFolder(self.test_dir, transform=self.transform)
+        self.train_dataset = datasets.MNIST(root_dir, transform=self.transform, train=True)
+        self.valid_dataset = datasets.MNIST(root_dir, transform=self.transform, train=False)
+        self.test_dataset = datasets.MNIST(root_dir, transform=self.transform, train=False)
 
         self.class_names = self.train_dataset.classes
 
@@ -45,9 +45,9 @@ class ImageDataset(Dataset):
         logging.info(f"Class names: {self.class_names}")
 
     def get_dataloaders(self, batch_size=32, num_workers=4):
-        train_loader = DataLoader(self.train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-        val_loader = DataLoader(self.valid_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
-        test_loader = DataLoader(self.test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+        train_loader = DataLoader(self.train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
+        val_loader = DataLoader(self.valid_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
+        test_loader = DataLoader(self.test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
 
         self.diagnose_dataset(train_loader=train_loader)
         self.print_dataset_info(train_loader=train_loader, val_loader=val_loader)

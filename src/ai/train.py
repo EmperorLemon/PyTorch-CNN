@@ -82,6 +82,9 @@ class Trainer():
         start_time = time.time()
 
         for epoch in range(self.max_epochs):
+            print(f"\nGPU Memory: Allocated: {cuda.memory_allocated() / 1e9:.2f} GB, "
+              f"Cached: {cuda.memory_reserved() / 1e9:.2f} GB")
+
             train_loss = self.fit_epoch()
             val_loss, val_accuracy = self.validate()
 
@@ -100,7 +103,7 @@ class Trainer():
             print(f"Current learning rate: {current_lr}")
 
             # Save best model
-            if val_loss < best_val_loss:
+            if val_loss < best_val_loss and (epoch + 1) % self.patience == 0:
                 # save_model(model=self.model)
                 # print(f"New best model saved at epoch {epoch+1}")
                 best_val_loss = val_loss
@@ -122,9 +125,10 @@ class Trainer():
         progress_bar = tqdm(self.train_loader, desc="Training")
         # Iterate and update network weights, compute loss
         for i, (inputs, labels) in enumerate(progress_bar):
-            # Get inputs and the corresponding labels
+            # Get inputs and the corresponding labels, move tensors to configured device
             inputs, labels = inputs.to(self.device), labels.to(self.device)
 
+            # Forward pass
             with autocast(device_type=self.model.device.type, enabled=self.mixed_precision):
                 # Get output from model, given the inputs
                 outputs = self.model(inputs)
@@ -132,6 +136,8 @@ class Trainer():
                 # Get loss for predicted outputs
                 loss = self.loss_fn(outputs, labels)
                 loss = loss / self.gradient_accumulation_steps
+
+            # Backward and optimize
 
             if self.mixed_precision:
                 self.scaler.scale(loss).backward()
@@ -144,7 +150,7 @@ class Trainer():
                     self.scaler.step(self.optimizer)
                     self.scaler.update()
                 else:
-                    # Update the parameters (perform optimization)
+                    # Update the parameters ((weights)) (perform optimization)
                     self.optimizer.step()
 
                 # Clear gradient buffers

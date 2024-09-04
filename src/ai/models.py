@@ -1,8 +1,8 @@
 from .model import Layer, nn
-from typing import List
+from typing import Type, List
 
 def make_lazy_vgg_block(out_channels: int, num_convs: int, block_num: int) -> List[Layer]:
-    layers = []
+    layers: List[Layer] = []
 
     for i in range(num_convs):
         layers.append(Layer(f"conv{block_num}_{i+1}", nn.LazyConv2d(out_channels, kernel_size=3, padding=1)))
@@ -13,8 +13,8 @@ def make_lazy_vgg_block(out_channels: int, num_convs: int, block_num: int) -> Li
 
     return layers
 
+## VGG16 architecture with lazy layers
 def create_lazy_vgg16(output_size: int) -> List[Layer]:
-    # VGG16 architecture with lazy layers
     network_layers: List[Layer] = (
         make_lazy_vgg_block(64, 2, 1) +
         make_lazy_vgg_block(128, 2, 2) +
@@ -33,4 +33,32 @@ def create_lazy_vgg16(output_size: int) -> List[Layer]:
         ]
     )
     
+    return network_layers
+
+## Multilayer Perceptron architecture with lazy layers
+def create_lazy_mlp(hidden_layers: List[int],
+                    output_size: int,
+                    dropout_rate: float = 0.5,
+                    activation: Type[nn.Module] = nn.ReLU()) -> List[Layer]:
+    network_layers: List[Layer] = []
+
+    # Flatten Layer
+    network_layers.append(Layer("flatten", nn.Flatten()))
+
+    # Input layer
+    network_layers.append(Layer("input", nn.LazyLinear(hidden_layers[0])))
+    network_layers.append(Layer("act_input", activation))
+    network_layers.append(Layer("drop_input", nn.Dropout(dropout_rate)))
+
+    # Hidden layers
+    for i, hidden_size in enumerate(hidden_layers[1:], 1):
+        network_layers.append(Layer(f"hidden_{i}", nn.LazyLinear(hidden_size)))
+        network_layers.append(Layer(f"act_{i}", activation))
+        network_layers.append(Layer(f"drop_{i}", nn.Dropout(dropout_rate)))
+
+    # Output layer
+    network_layers.append(Layer("output", nn.LazyLinear(output_size)))
+
+    print([(layer.name, layer.module) for layer in network_layers])
+
     return network_layers
