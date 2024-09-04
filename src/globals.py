@@ -7,9 +7,6 @@ OUTPUT_DIR = os.path.abspath(os.path.join(BASE_DIR, "out"))
 DATA_DIR = os.path.abspath(os.path.join(BASE_DIR, "data"))
 FASHION_DATA_DIR = os.path.abspath(os.path.join(DATA_DIR, "fashion"))
 
-MODEL_FILE = "fashion_model.pth"
-MODEL_PATH = os.path.abspath(os.path.join(MODEL_DIR, MODEL_FILE))
-
 # Ensure necessary directories exist
 os.makedirs(LOG_DIR, exist_ok=True)
 os.makedirs(MODEL_DIR, exist_ok=True)

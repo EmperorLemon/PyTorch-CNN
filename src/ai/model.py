@@ -1,13 +1,12 @@
 from torch import nn, cuda
 from torch import device as TorchDevice
 from collections import OrderedDict
-from typing import List
+from typing import List, NamedTuple
 
 ## A network layer
-class Layer():
-    def __init__(self, name: str, layer: nn.Module):
-        self.name = name
-        self.layer = layer
+class Layer(NamedTuple):
+    name: str
+    module: nn.Module
 
 ## A network model
 class Model(nn.Module):
@@ -24,7 +23,7 @@ class Model(nn.Module):
             raise ValueError("Layer names must be unique")
 
         # The network is a Sequential model
-        self.net = nn.Sequential(OrderedDict([(layer.name, layer.layer) for layer in layers]))
+        self.net = nn.Sequential(OrderedDict([(layer.name, layer.module) for layer in layers]))
 
     ## Forward step
     def forward(self, X):
