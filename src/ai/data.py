@@ -5,7 +5,6 @@ from torchvision import datasets, transforms
 from collections import Counter
 
 import os
-import logging
 
 class ImageDataset(Dataset):
     def __init__(self, 
@@ -24,25 +23,27 @@ class ImageDataset(Dataset):
         self.std = std
 
         self.transform = transforms.Compose([
-            transforms.Resize((self.img_size, self.img_size)),
-            transforms.Pad(0),
-            transforms.CenterCrop((self.img_size, self.img_size)),
+            # transforms.Resize((self.img_size, self.img_size)),
+            # transforms.Pad(0),
+            # transforms.CenterCrop((self.img_size, self.img_size)),
             transforms.ToTensor(),
             transforms.Normalize(mean=self.mean, std=self.std)
+            # transforms.Normalize((0.5,), (0.5,))
         ])
 
-        for dir_path in [self.train_dir, self.valid_dir, self.test_dir]:
-            if not os.path.exists(dir_path):
-                raise FileNotFoundError(f"Directory not found: {dir_path}")
+        # for dir_path in [self.train_dir, self.valid_dir, self.test_dir]:
+        #     if not os.path.exists(dir_path):
+        #         raise FileNotFoundError(f"Directory not found: {dir_path}")
+
+        # self.train_dataset = datasets.ImageFolder(train_dir, transform=self.transform)
+        # self.valid_dataset = datasets.ImageFolder(valid_dir, transform=self.transform)
+        # self.test_dataset = datasets.ImageFolder(test_dir, transform=self.transform)
         
-        self.train_dataset = datasets.MNIST(root_dir, transform=self.transform, train=True)
-        self.valid_dataset = datasets.MNIST(root_dir, transform=self.transform, train=False)
-        self.test_dataset = datasets.MNIST(root_dir, transform=self.transform, train=False)
+        self.train_dataset = datasets.CIFAR10(root_dir, transform=self.transform, train=True)
+        self.valid_dataset = datasets.CIFAR10(root_dir, transform=self.transform, train=False)
+        self.test_dataset = datasets.CIFAR10(root_dir, transform=self.transform, train=False)
 
         self.class_names = self.train_dataset.classes
-
-        logging.info(f"Number of classes: {len(self.class_names)}")
-        logging.info(f"Class names: {self.class_names}")
 
     def get_dataloaders(self, batch_size=32, num_workers=4):
         train_loader = DataLoader(self.train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
@@ -50,7 +51,7 @@ class ImageDataset(Dataset):
         test_loader = DataLoader(self.test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
 
         self.diagnose_dataset(train_loader=train_loader)
-        self.print_dataset_info(train_loader=train_loader, val_loader=val_loader)
+        self.print_dataset_info(train_loader=train_loader, val_loader=val_loader, test_loader=test_loader)
 
         return train_loader, val_loader, test_loader
     
@@ -73,15 +74,17 @@ class ImageDataset(Dataset):
 
         return class_info
 
-    def print_dataset_info(self, train_loader, val_loader):
+    def print_dataset_info(self, train_loader: DataLoader, val_loader: DataLoader, test_loader: DataLoader):
         train_samples = len(train_loader.dataset)
         val_samples = len(val_loader.dataset)
         batch_size = train_loader.batch_size
         train_batches = len(train_loader)
         val_batches = len(val_loader)
+        test_batches = len(test_loader)
 
         print(f"\nTraining samples: {train_samples}")
         print(f"Validation samples: {val_samples}")
         print(f"\nBatch size: {batch_size}")
         print(f"Number of training batches: {train_batches}")
-        print(f"Number of validation batches: {val_batches}\n")
+        print(f"Number of validation batches: {val_batches}")
+        print(f"Number of test batches: {test_batches}\n")

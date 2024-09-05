@@ -22,3 +22,5 @@ def save_state(state, model_file: str):
 def load_state(model_file: str):
     model_path = os.path.abspath(os.path.join(MODEL_DIR, model_file))
 
+    return load(model_path, map_location="cpu", weights_only=True)
+

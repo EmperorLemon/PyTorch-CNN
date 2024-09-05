@@ -4,7 +4,7 @@ from ai.data import ImageDataset
 from ai.utils import check_cuda, save_state, load_state
 from ai.visualizer import visualize_results
 from ai.test import verify_data_and_model, evaluate_model
-from ai.models import create_lazy_vgg16, create_lazy_mlp
+from ai.models import create_lazy_vgg16, create_lazy_mlp, create_lazy_cnn
 
 from torch.utils.tensorboard.writer import SummaryWriter
 
@@ -33,15 +33,18 @@ def main() -> int:
     check_cuda()
 
     # Load the dataset
-    dataset = ImageDataset(FASHION_DATA_DIR, img_size=32, use_augmentation=True)
+    dataset = ImageDataset(DATA_DIR, img_size=32, use_augmentation=True)
     train_loader, val_loader, test_loader = dataset.get_dataloaders(batch_size=hyperparameters.get("batch_size"), num_workers=4)
 
     output_size = len(dataset.class_names)
-    hidden_layers = [64, 32]
+    # hidden_layers = [64, 32]
+    conv_layers = [64, 64, 128, 128, 256, 256]
+    fc_layers = [512, 256]
 
     # VGG16 architecture
     # network_layers = create_lazy_vgg16(output_size=output_size)
-    network_layers = create_lazy_mlp(hidden_layers=hidden_layers, output_size=output_size, dropout_rate=0.5)
+    # network_layers = create_lazy_mlp(hidden_layers=hidden_layers, output_size=output_size, dropout_rate=0.5)
+    network_layers = create_lazy_cnn(conv_layers=conv_layers, fc_layers=fc_layers, output_size=output_size)
 
     log_dir = get_log_dir()
     writer = SummaryWriter(log_dir=log_dir)

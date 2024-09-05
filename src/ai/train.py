@@ -99,7 +99,7 @@ class Trainer():
             # Learning rate scheduling
             self.scheduler.step(val_loss)
 
-            current_lr = self.scheduler.get_last_lr()[0]
+            current_lr = self.scheduler.get_last_lr()[epoch]
             print(f"Current learning rate: {current_lr}")
 
             # Save best model
