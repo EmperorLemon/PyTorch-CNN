@@ -11,7 +11,6 @@ from ai.model import Model
 from ai.train import Trainer
 from ai.data import ImageDataset
 from ai.utils import check_cuda, load_state
-from ai.visualizer import visualize_results
 from ai.test import evaluate_model
 from ai.models import create_mlp, create_cnn
 
@@ -64,8 +63,6 @@ def main() -> int:
     # train_model(model=model, trainer=trainer, train_loader=train_loader, val_loader=val_loader)
 
     test_model(model=model, dataset=dataset, test_loader=test_loader)
-
-    visualize_results(test_loader=test_loader, model=model, writer=writer, output_dir=OUTPUT_DIR)
 
     writer.flush()
     writer.close()
