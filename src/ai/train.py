@@ -32,10 +32,10 @@ class EarlyStopper():
 class Trainer():
     def __init__(self, 
                  n_epochs : int,
-                 loss_fn: Type[nn.Module] = nn.CrossEntropyLoss,
+                 criterion: Type[nn.Module] = nn.CrossEntropyLoss,
                  lr: float = 1e-3,
                  weight_decay: float = 1e-5,
-                 patience: int = 4,
+                 patience: int = 5,
                  min_delta: float = 1e-4,
                  gradient_accumulation_steps: int = 1,
                  mixed_precision: bool = True,
@@ -43,7 +43,7 @@ class Trainer():
                  writer: Optional[Type[SummaryWriter]] = None):
         
         self.max_epochs = n_epochs
-        self.loss_fn = loss_fn()
+        self.criterion = criterion()
         self.lr = lr
         self.weight_decay = weight_decay
         self.patience = patience
@@ -58,7 +58,7 @@ class Trainer():
         
     ## Optimization algorithm
     def configure_optimizers(self, model_params):
-        optimizer = optim.Adam(params=model_params, lr=self.lr, weight_decay=self.weight_decay)
+        optimizer = optim.SGD(params=model_params, lr=self.lr, weight_decay=self.weight_decay, momentum=0.9)
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer=optimizer, 
                                                          mode='min', 
                                                          factor=0.5, 
@@ -71,14 +71,18 @@ class Trainer():
         return optimizer, scheduler
 
     ## Fitting step
-    def fit(self, model : Model, train_loader, val_loader):
+    def fit(self, model, train_loader, val_loader):
         self.model = model.to(self.device)
         self.train_loader = train_loader
         self.val_loader = val_loader
 
         # Configure the optimizer
         self.optimizer, self.scheduler = self.configure_optimizers(self.model.parameters())
-        self.checkpoint = self.load_checkpoint(get_best_state())
+        
+        best_state = get_best_state()
+
+        if best_state is not None:
+            self.checkpoint = self.load_checkpoint(best_state)
 
         best_val_loss = float('inf')
         start_time = time.time()
@@ -135,7 +139,7 @@ class Trainer():
                 outputs = self.model(inputs)
 
                 # Get loss for predicted outputs
-                loss = self.loss_fn(outputs, labels)
+                loss = self.criterion(outputs, labels)
                 loss = loss / self.gradient_accumulation_steps
 
             # Backward and optimize
@@ -161,6 +165,8 @@ class Trainer():
 
             # Update progress bar
             progress_bar.set_postfix({'loss': f'{loss.item():.4f}'})
+
+            del inputs, labels, outputs
         
         return total_loss / num_batches
     
@@ -178,7 +184,7 @@ class Trainer():
 
                 with autocast(device_type=self.model.device.type, enabled=self.mixed_precision):
                     outputs = self.model(inputs)
-                    loss = self.loss_fn(outputs, labels)
+                    loss = self.criterion(outputs, labels)
 
                 total_loss += loss.item()
 
@@ -192,6 +198,8 @@ class Trainer():
                     'loss': f'{total_loss / (progress_bar.n + 1):.4f}',
                     'accuracy': f'{current_accuracy:.2f}%'
                 })
+
+                del inputs, labels, outputs
 
         val_loss = total_loss / len(self.val_loader)
         accuracy = 100 * correct / total
@@ -207,9 +215,9 @@ class Trainer():
             "val_accuracy": val_accuracy
         }
         
-        save_state(checkpoint, f"ep={epoch+1}_vl={val_loss:.4f}_va={val_accuracy:.2f}.pth")
+        save_state(checkpoint, f"ep={epoch}_vl={val_loss:.4f}_va={val_accuracy:.2f}.pth")
         
-        print(f"Checkpoint saved at epoch {epoch+1}")
+        print(f"Checkpoint saved at epoch {epoch}")
 
     def load_checkpoint(self, checkpoint_path):
         checkpoint = load_state(checkpoint_path)
@@ -221,6 +229,6 @@ class Trainer():
         val_loss = checkpoint["val_loss"]
         val_accuracy = checkpoint["val_accuracy"]
         
-        print(f"Loaded checkpoint from epoch {epoch+1} with validation loss {val_loss:.4f} and accuracy {val_accuracy:.2f}%")
+        print(f"Loaded checkpoint from epoch {epoch} with validation loss {val_loss:.4f} and accuracy {val_accuracy:.2f}%")
         
         return epoch
