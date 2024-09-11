@@ -1,10 +1,11 @@
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, Subset
 
 from torchvision import datasets, transforms
 
 from collections import Counter
 
 import os
+import numpy as np
 
 class ImageDataset(Dataset):
     def __init__(self, 
@@ -22,69 +23,94 @@ class ImageDataset(Dataset):
         self.mean = mean
         self.std = std
 
-        self.transform = transforms.Compose([
-            # transforms.Resize((self.img_size, self.img_size)),
-            # transforms.Pad(0),
-            # transforms.CenterCrop((self.img_size, self.img_size)),
+        # Training transforms
+        self.train_transform = transforms.Compose([
+            # Resize the image to a fixed size
+            transforms.Resize((self.img_size, self.img_size)),
+            # Randomly flip the image horizontally
+            transforms.RandomHorizontalFlip(p=0.5),  
+            # Randomly rotate the image by up to 10 degrees
+            transforms.RandomRotation(10),  
+            # Randomly change the brightness, contrast, and saturation
+            transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),  
+            # Convert the image to a PyTorch tensor
             transforms.ToTensor(),
+            # Normalize the image (using ImageNet stats)
             transforms.Normalize(mean=self.mean, std=self.std)
-            # transforms.Normalize((0.5,), (0.5,))
         ])
 
-        # for dir_path in [self.train_dir, self.valid_dir, self.test_dir]:
-        #     if not os.path.exists(dir_path):
-        #         raise FileNotFoundError(f"Directory not found: {dir_path}")
+        # Validation transforms
+        self.valid_transform = transforms.Compose([
+            # Resize the image to a fixed size
+            transforms.Resize((self.img_size, self.img_size)),
+            # Convert the image to a PyTorch tensor
+            transforms.ToTensor(),
+            # Normalize the image (using ImageNet stats)
+            transforms.Normalize(mean=self.mean, std=self.std)
+        ])
 
-        # self.train_dataset = datasets.ImageFolder(train_dir, transform=self.transform)
-        # self.valid_dataset = datasets.ImageFolder(valid_dir, transform=self.transform)
-        # self.test_dataset = datasets.ImageFolder(test_dir, transform=self.transform)
-        
-        self.train_dataset = datasets.CIFAR10(root_dir, transform=self.transform, train=True)
-        self.valid_dataset = datasets.CIFAR10(root_dir, transform=self.transform, train=False)
-        self.test_dataset = datasets.CIFAR10(root_dir, transform=self.transform, train=False)
+        self.test_transform = self.valid_transform
+
+        for dir_path in [self.train_dir, self.valid_dir, self.test_dir]:
+            if not os.path.exists(dir_path):
+                raise FileNotFoundError(f"Directory not found: {dir_path}")
+
+        self.train_dataset = datasets.ImageFolder(self.train_dir, transform=self.train_transform)
+        self.valid_dataset = datasets.ImageFolder(self.valid_dir, transform=self.valid_transform)
+        self.test_dataset = datasets.ImageFolder(self.test_dir, transform=self.test_transform)
 
         self.class_names = self.train_dataset.classes
+        self.diagnose_dataset(train_dataset=self.train_dataset, val_dataset=self.valid_dataset, test_dataset=self.test_dataset)
 
     def get_dataloaders(self, batch_size=32, num_workers=4):
         train_loader = DataLoader(self.train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
         val_loader = DataLoader(self.valid_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
         test_loader = DataLoader(self.test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
 
-        self.diagnose_dataset(train_loader=train_loader)
-        self.print_dataset_info(train_loader=train_loader, val_loader=val_loader, test_loader=test_loader)
-
         return train_loader, val_loader, test_loader
     
-    def diagnose_dataset(self, train_loader):
-        # Check class distribution
-        train_labels = []
-        for _, labels in train_loader:
-            train_labels.extend(labels.numpy())
-        
-        # Count occurrences of each class
-        label_counts = Counter(train_labels)
-        
-        print("Class distribution in training set:")
-        for class_idx, class_name in enumerate(self.class_names):
-            count = label_counts.get(class_idx, 0)  # Get count, default to 0 if class not present
-            print(f"Class {class_idx} ({class_name}): {count}")
+    def get_labels(self, dataset, max_samples=10000):
+        if hasattr(dataset, 'targets'):
+            return dataset.targets
+        elif isinstance(dataset, Subset):
+            return [dataset.dataset.targets[i] for i in dataset.indices]
+        else:
+            # Sample a subset of the data if it's too large
+            indices = np.random.choice(len(dataset), min(max_samples, len(dataset)), replace=False)
+            return [dataset[i][1] for i in indices]
+    
+    def diagnose_dataset(self, train_dataset, val_dataset, test_dataset):
+        datasets = {
+            'Training': train_dataset,
+            'Validation': val_dataset,
+            'Test': test_dataset
+        }
 
-        # If you want to create a list of tuples with (class_index, class_name, count):
-        class_info = [(idx, name, label_counts.get(idx, 0)) for idx, name in enumerate(self.class_names)]
+        all_info = {}
 
-        return class_info
+        for split_name, dataset in datasets.items():
+            labels = self.get_labels(dataset)
+            label_counts = Counter(labels)
+            
+            print(f"\nClass distribution in {split_name} set:")
+            class_info = []
+            for class_idx, class_name in enumerate(self.class_names):
+                count = label_counts.get(class_idx, 0)
+                percentage = (count / len(labels)) * 100 if len(labels) > 0 else 0
+                print(f"Class {class_idx} ({class_name}): {count} ({percentage:.2f}%)")
+                class_info.append((class_idx, class_name, count, percentage))
+            
+            all_info[split_name] = {
+                'samples': len(dataset),
+                'class_info': class_info
+            }
 
-    def print_dataset_info(self, train_loader: DataLoader, val_loader: DataLoader, test_loader: DataLoader):
-        train_samples = len(train_loader.dataset)
-        val_samples = len(val_loader.dataset)
-        batch_size = train_loader.batch_size
-        train_batches = len(train_loader)
-        val_batches = len(val_loader)
-        test_batches = len(test_loader)
+        self.print_dataset_summary(all_info)
 
-        print(f"\nTraining samples: {train_samples}")
-        print(f"Validation samples: {val_samples}")
-        print(f"\nBatch size: {batch_size}")
-        print(f"Number of training batches: {train_batches}")
-        print(f"Number of validation batches: {val_batches}")
-        print(f"Number of test batches: {test_batches}\n")
+        return all_info
+
+    def print_dataset_summary(self, all_info):
+        print("\nDataset Summary:")
+        for split_name, info in all_info.items():
+            print(f"\n{split_name} set:")
+            print(f"  Total samples: {info['samples']}")

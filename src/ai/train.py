@@ -2,7 +2,7 @@ from torch import optim, no_grad, max
 from torch.utils.tensorboard.writer import SummaryWriter
 from torch.amp import GradScaler, autocast
 from .model import Model, nn, cuda
-from .utils import save_state, load_state
+from .utils import save_state, load_state, get_best_state
 from typing import Type, Optional
 from tqdm import tqdm
 
@@ -10,7 +10,7 @@ import time
 
 class EarlyStopper():
     def __init__(self, 
-                 patience: int = 5,
+                 patience: int = 8,
                  min_delta: float = 0.0):
         self.patience = patience
         self.min_delta = min_delta
@@ -24,6 +24,8 @@ class EarlyStopper():
             self.counter = 0
         else:
             self.counter += 1
+            self.countdown = self.patience - self.counter
+            print(f"Epochs remaining before stopping early: {self.countdown}")
             if self.counter >= self.patience:
                 self.early_stop = True
 
@@ -32,8 +34,8 @@ class Trainer():
                  n_epochs : int,
                  loss_fn: Type[nn.Module] = nn.CrossEntropyLoss,
                  lr: float = 1e-3,
-                 weight_decay: float = 1e-4,
-                 patience: int = 5,
+                 weight_decay: float = 1e-5,
+                 patience: int = 4,
                  min_delta: float = 1e-4,
                  gradient_accumulation_steps: int = 1,
                  mixed_precision: bool = True,
@@ -51,12 +53,12 @@ class Trainer():
         self.device = device
         self.writer = writer if writer is not None else SummaryWriter()
         
-        self.early_stopper = EarlyStopper(patience=self.patience, min_delta=self.min_delta)
+        self.early_stopper = EarlyStopper(patience=self.patience * 2 + 1, min_delta=self.min_delta)
         self.scaler = GradScaler() if self.mixed_precision else None
         
     ## Optimization algorithm
     def configure_optimizers(self, model_params):
-        optimizer = optim.SGD(params=model_params, lr=self.lr, weight_decay=self.weight_decay, momentum=0.9)
+        optimizer = optim.Adam(params=model_params, lr=self.lr, weight_decay=self.weight_decay)
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer=optimizer, 
                                                          mode='min', 
                                                          factor=0.5, 
@@ -76,9 +78,9 @@ class Trainer():
 
         # Configure the optimizer
         self.optimizer, self.scheduler = self.configure_optimizers(self.model.parameters())
+        self.checkpoint = self.load_checkpoint(get_best_state())
 
         best_val_loss = float('inf')
-        
         start_time = time.time()
 
         for epoch in range(self.max_epochs):
@@ -87,25 +89,24 @@ class Trainer():
 
             train_loss = self.fit_epoch()
             val_loss, val_accuracy = self.validate()
-
-            if self.writer is not None:
-                # Log to TensorBoard
-                self.writer.add_scalar("Loss/Train", train_loss, epoch)
-                self.writer.add_scalar("Loss/Validation", val_loss, epoch)
-                self.writer.add_scalar("Accuracy/Validation", val_accuracy, epoch)
             
             print(f"Epoch {epoch+1}/{self.max_epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Val Accuracy: {val_accuracy:.2f}%\n")
 
             # Learning rate scheduling
             self.scheduler.step(val_loss)
 
-            current_lr = self.scheduler.get_last_lr()[epoch]
-            print(f"Current learning rate: {current_lr}")
+            current_lr = self.scheduler.get_last_lr()[0]
+            print(f"Current learning rate: {current_lr:.4f}")
+
+            if self.writer is not None:
+                # Log to TensorBoard
+                self.writer.add_scalar("Loss/Train", train_loss, epoch)
+                self.writer.add_scalar("Loss/Validation", val_loss, epoch)
+                self.writer.add_scalar("Accuracy/Validation", val_accuracy, epoch)
+                self.writer.add_scalar("Learning_Rate", current_lr, epoch)
 
             # Save best model
             if val_loss < best_val_loss and (epoch + 1) % self.patience == 0:
-                # save_model(model=self.model)
-                # print(f"New best model saved at epoch {epoch+1}")
                 best_val_loss = val_loss
                 self.save_checkpoint(epoch, val_loss, val_accuracy)
 
@@ -122,7 +123,7 @@ class Trainer():
         total_loss = 0.0
         num_batches = 0
 
-        progress_bar = tqdm(self.train_loader, desc="Training")
+        progress_bar = tqdm(self.train_loader, desc="Training", leave=False)
         # Iterate and update network weights, compute loss
         for i, (inputs, labels) in enumerate(progress_bar):
             # Get inputs and the corresponding labels, move tensors to configured device
@@ -138,7 +139,6 @@ class Trainer():
                 loss = loss / self.gradient_accumulation_steps
 
             # Backward and optimize
-
             if self.mixed_precision:
                 self.scaler.scale(loss).backward()
             else:
@@ -170,6 +170,8 @@ class Trainer():
         correct = 0
         total = 0
 
+        progress_bar = tqdm(self.val_loader, desc="Validating", leave=False)
+
         with no_grad():
             for inputs, labels in self.val_loader:
                 inputs, labels = inputs.to(self.device), labels.to(self.device)
@@ -183,6 +185,13 @@ class Trainer():
                 _, predicted = max(outputs.data, 1)
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
+
+                # Update progress bar
+                current_accuracy = 100 * correct / total
+                progress_bar.set_postfix({
+                    'loss': f'{total_loss / (progress_bar.n + 1):.4f}',
+                    'accuracy': f'{current_accuracy:.2f}%'
+                })
 
         val_loss = total_loss / len(self.val_loader)
         accuracy = 100 * correct / total
@@ -198,9 +207,9 @@ class Trainer():
             "val_accuracy": val_accuracy
         }
         
-        save_state(checkpoint, f"checkpoint_epoch_{epoch}.pth")
+        save_state(checkpoint, f"ep={epoch+1}_vl={val_loss:.4f}_va={val_accuracy:.2f}.pth")
         
-        print(f"Checkpoint saved at epoch {epoch}")
+        print(f"Checkpoint saved at epoch {epoch+1}")
 
     def load_checkpoint(self, checkpoint_path):
         checkpoint = load_state(checkpoint_path)
@@ -212,6 +221,6 @@ class Trainer():
         val_loss = checkpoint["val_loss"]
         val_accuracy = checkpoint["val_accuracy"]
         
-        print(f"Loaded checkpoint from epoch {epoch} with validation loss {val_loss:.4f} and accuracy {val_accuracy:.2f}%")
+        print(f"Loaded checkpoint from epoch {epoch+1} with validation loss {val_loss:.4f} and accuracy {val_accuracy:.2f}%")
         
         return epoch

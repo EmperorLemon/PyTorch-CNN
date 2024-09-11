@@ -1,104 +1,79 @@
-from .model import Layer, nn
-from typing import Type, List
+from .model import nn
+from typing import Type, List, Union, Tuple
 
-def make_lazy_vgg_block(out_channels: int, num_convs: int, block_num: int) -> List[Layer]:
-    layers: List[Layer] = []
+def linear_block(in_features: int, 
+                 out_features: int, 
+                 activation: nn.Module = nn.ReLU(),
+                 dropout_rate: float = 0.5):
+    
+    return nn.Sequential(
+        nn.Linear(in_features=in_features, out_features=out_features),
+        activation,
+        nn.Dropout(dropout_rate)
+    )
 
-    for i in range(num_convs):
-        layers.append(Layer(f"conv{block_num}_{i+1}", nn.LazyConv2d(out_channels, kernel_size=3, padding=1)))
-        layers.append(Layer(f"batch{block_num}_{i+1}", nn.LazyBatchNorm2d()))
-        layers.append(Layer(f"relu{block_num}_{i+1}", nn.ReLU()))
+def conv_block(in_channels: int,
+               out_channels: int,
+               kernel_size: Tuple[int, int] = (3, 3),
+               padding: Union[int, Tuple[int, int]] = 1,
+               pool_size: Tuple[int, int] = (2, 2),
+               use_pooling: bool = True,
+               activation: nn.Module = nn.ReLU(),
+               dropout_rate: float = 0.5):
+    
+    layers = [
+        nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, padding=padding),
+        nn.BatchNorm2d(num_features=out_channels),
+        activation
+    ]
+    
+    if use_pooling:
+        layers.append(nn.MaxPool2d(pool_size))
+    
+    layers.append(nn.Dropout2d(dropout_rate))
+    
+    return nn.Sequential(*layers)
 
-    layers.append(Layer(f"pool{block_num}", nn.MaxPool2d(kernel_size=2, stride=2)))
+def create_mlp(input_size: int,
+               fc_layers: List[int],
+               num_classes: int,
+               dropout_rate: float = 0.5) -> List[nn.Module]:
+    layers = []
+
+    # Input layer
+    layers.append(nn.Flatten()) # Flatten the 3D input to 1D
+    
+    layers.append(nn.Linear(in_features=input_size, out_features=fc_layers[0]))
+    layers.append(nn.LayerNorm(fc_layers[0]))
+    layers.append(nn.ReLU())
+    layers.append(nn.Dropout(dropout_rate))
+
+    layers.append(nn.Linear(in_features=fc_layers[0], out_features=fc_layers[1]))
+    layers.append(nn.LayerNorm(fc_layers[1]))
+    layers.append(nn.ReLU())
+    layers.append(nn.Dropout(dropout_rate))
+
+    layers.append(nn.Linear(in_features=fc_layers[-1], out_features=num_classes))
 
     return layers
 
-## VGG16 architecture with lazy layers
-def create_lazy_vgg16(output_size: int) -> List[Layer]:
-    network_layers: List[Layer] = (
-        make_lazy_vgg_block(64, 2, 1) +
-        make_lazy_vgg_block(128, 2, 2) +
-        make_lazy_vgg_block(256, 3, 3) +
-        make_lazy_vgg_block(512, 3, 4) +
-        make_lazy_vgg_block(512, 3, 5) +
-        [
-            Layer("flatten", nn.Flatten()),
-            Layer("fc1", nn.LazyLinear(4096)),
-            Layer("relu_fc1", nn.ReLU()),
-            Layer("drop1", nn.Dropout(0.5)),
-            Layer("fc2", nn.LazyLinear(4096)),
-            Layer("relu_fc2", nn.ReLU()),
-            Layer("drop2", nn.Dropout(0.5)),
-            Layer("fc3", nn.LazyLinear(output_size))
-        ]
-    )
+def create_cnn(in_channels: int,
+               conv_layers: List[int],
+               fc_layers: List[int],
+               num_classes: int,
+               dropout_rate: 0.5) -> List[nn.Module]:
     
-    return network_layers
-
-## Multilayer Perceptron architecture with lazy layers
-def create_lazy_mlp(hidden_layers: List[int],
-                    output_size: int,
-                    dropout_rate: float = 0.5,
-                    activation: Type[nn.Module] = nn.ReLU()) -> List[Layer]:
-    network_layers: List[Layer] = []
-
-    # Flatten Layer
-    network_layers.append(Layer("flatten", nn.Flatten()))
-
-    # Input layer
-    network_layers.append(Layer("input", nn.LazyLinear(hidden_layers[0])))
-    network_layers.append(Layer("act_input", activation))
-    network_layers.append(Layer("drop_input", nn.Dropout(dropout_rate)))
-
-    # Hidden layers
-    for i, hidden_size in enumerate(hidden_layers[1:], 1):
-        network_layers.append(Layer(f"hidden_{i}", nn.LazyLinear(hidden_size)))
-        network_layers.append(Layer(f"act_{i}", activation))
-        network_layers.append(Layer(f"drop_{i}", nn.Dropout(dropout_rate)))
-
-    # Output layer
-    network_layers.append(Layer("output", nn.LazyLinear(output_size)))
-
-    # print([(layer.name, layer.module) for layer in network_layers])
-
-    return network_layers
-
-def create_lazy_cnn(conv_layers: List[int],
-                    fc_layers: List[int],
-                    output_size: int,
-                    dropout_rate: float = 0.5,
-                    activation: Type[nn.Module] = nn.ReLU()) -> List[Layer]:
-    network_layers: List[Layer] = []
+    layers = []
 
     # Convolutional layers
-    for i, num_filters in enumerate(conv_layers):
-        if i == 0:
-            network_layers.append(Layer(f"conv_{i}", nn.LazyConv2d(num_filters, kernel_size=3, padding=1)))
-        else:
-            network_layers.append(Layer(f"conv_{i}", nn.LazyConv2d(num_filters, kernel_size=3, padding=1)))
-
-        network_layers.append(Layer(f"bn_conv_{i}", nn.LazyBatchNorm2d()))
-        network_layers.append(Layer(f"act_conv_{i}", activation))
-        
-        # Add pooling every other layer
-        if i % 2 == 1:
-            network_layers.append(Layer(f"pool_{i}", nn.MaxPool2d(2)))
-
-        network_layers.append(Layer(f"drop_conv_{i}", nn.Dropout2d(dropout_rate)))
+    for i, out_channels in enumerate(conv_layers):
+        layers.append(conv_block(
+            in_channels=in_channels if i == 0 else conv_layers[i - 1],
+            out_channels=out_channels,
+            dropout_rate=dropout_rate
+        ))
 
     # Flatten layer
-    network_layers.append(Layer("flatten", nn.Flatten()))
+    layers.append(nn.Flatten())
 
-    # Fully connected layers
-    for i, fc_size in enumerate(fc_layers):
-        network_layers.append(Layer(f"fc_{i}", nn.LazyLinear(fc_size)))
-        network_layers.append(Layer(f"bn_fc_{i}", nn.LazyBatchNorm1d()))
-        network_layers.append(Layer(f"act_fc_{i}", activation))
-        network_layers.append(Layer(f"drop_fc_{i}", nn.Dropout(dropout_rate)))
-
-    # Output layer
-    network_layers.append(Layer("output", nn.LazyLinear(output_size)))
-
-    # print([f"({layer.name}, {layer.module})" for layer in network_layers])
-
-    return network_layers
+    # Fully connected layer
