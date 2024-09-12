@@ -10,7 +10,7 @@ import time
 
 class EarlyStopper():
     def __init__(self, 
-                 patience: int = 8,
+                 patience: int = 6,
                  min_delta: float = 0.0):
         self.patience = patience
         self.min_delta = min_delta
@@ -35,7 +35,7 @@ class Trainer():
                  criterion: Type[nn.Module] = nn.CrossEntropyLoss,
                  lr: float = 1e-3,
                  weight_decay: float = 1e-5,
-                 patience: int = 5,
+                 patience: int = 3,
                  min_delta: float = 1e-4,
                  gradient_accumulation_steps: int = 1,
                  mixed_precision: bool = True,
@@ -112,7 +112,7 @@ class Trainer():
             # Save best model
             if val_loss < best_val_loss and (epoch + 1) % self.patience == 0:
                 best_val_loss = val_loss
-                self.save_checkpoint(epoch, val_loss, val_accuracy)
+                self.save_checkpoint(epoch, train_loss=train_loss, val_loss=val_loss, val_accuracy=val_accuracy)
 
             self.early_stopper(val_loss=val_loss)
             if self.early_stopper.early_stop:
@@ -123,10 +123,10 @@ class Trainer():
         print(f"\nTraining process has finished. Total time: {end_time - start_time:.2f} seconds")
 
     def fit_epoch(self):
-        self.model.train()
         total_loss = 0.0
         num_batches = 0
 
+        self.model.train()
         progress_bar = tqdm(self.train_loader, desc="Training", leave=False)
         # Iterate and update network weights, compute loss
         for i, (inputs, labels) in enumerate(progress_bar):
@@ -171,13 +171,13 @@ class Trainer():
         return total_loss / num_batches
     
     def validate(self):
-        self.model.eval()
         total_loss = 0.0
         correct = 0
         total = 0
 
         progress_bar = tqdm(self.val_loader, desc="Validating", leave=False)
 
+        self.model.eval()
         with no_grad():
             for inputs, labels in self.val_loader:
                 inputs, labels = inputs.to(self.device), labels.to(self.device)
@@ -206,18 +206,19 @@ class Trainer():
 
         return val_loss, accuracy
     
-    def save_checkpoint(self, epoch, val_loss, val_accuracy):
+    def save_checkpoint(self, epoch, train_loss, val_loss, val_accuracy):
         checkpoint = {
             "epoch": epoch,
             "model_state_dict": self.model.state_dict(),
             "optimizer_state_dict": self.optimizer.state_dict(),
+            "train_loss": train_loss,
             "val_loss": val_loss,
             "val_accuracy": val_accuracy
         }
         
-        save_state(checkpoint, f"ep={epoch}_vl={val_loss:.4f}_va={val_accuracy:.2f}.pth")
+        save_state(checkpoint, f"ep={epoch+1}_tl={train_loss:.4f}_vl={val_loss:.4f}_va={val_accuracy:.2f}.pth")
         
-        print(f"Checkpoint saved at epoch {epoch}")
+        print(f"Checkpoint saved at epoch {epoch+1}")
 
     def load_checkpoint(self, checkpoint_path):
         checkpoint = load_state(checkpoint_path)
@@ -226,9 +227,11 @@ class Trainer():
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         
         epoch = checkpoint["epoch"]
+        # train_loss = checkpoint["train_loss"]
         val_loss = checkpoint["val_loss"]
         val_accuracy = checkpoint["val_accuracy"]
         
-        print(f"Loaded checkpoint from epoch {epoch} with validation loss {val_loss:.4f} and accuracy {val_accuracy:.2f}%")
+        # print(f"Loaded checkpoint from epoch {epoch+1} with train loss {train_loss:.4f}, validation loss {val_loss:.4f}, and accuracy {val_accuracy:.2f}%")
+        print(f"Loaded checkpoint from epoch {epoch+1} validation loss {val_loss:.4f}, and accuracy {val_accuracy:.2f}%")
         
         return epoch

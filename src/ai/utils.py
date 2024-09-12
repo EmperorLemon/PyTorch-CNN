@@ -31,7 +31,7 @@ def load_state(model_file: str, checkpoint: bool = True):
 
 def get_best_state() -> str:
     # Regex to match pattern
-    pattern = r'ep=(\d+)_vl=([\d.]+)_va=([\d.]+)\.pth'
+    pattern = r'ep=(\d+)_tl=([\d.]+)_vl=([\d.]+)_va=([\d.]+)\.pth'
 
     vl_min = float('inf')
     best_state: str = None
@@ -44,8 +44,9 @@ def get_best_state() -> str:
 
         if match:
             epoch = int(match.group(1))
-            validation_loss = float(match.group(2))
-            validation_accuracy = float(match.group(3))
+            train_loss = float(match.group(2))
+            validation_loss = float(match.group(3))
+            validation_accuracy = float(match.group(4))
 
             if (validation_loss < vl_min):
                 vl_min = validation_loss
