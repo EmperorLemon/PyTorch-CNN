@@ -59,6 +59,7 @@ class Trainer():
     ## Optimization algorithm
     def configure_optimizers(self, model_params):
         optimizer = optim.SGD(params=model_params, lr=self.lr, weight_decay=self.weight_decay, momentum=0.9)
+        # optimizer = optim.Adam(params=model_params, lr=self.lr, weight_decay=self.weight_decay)
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer=optimizer, 
                                                          mode='min', 
                                                          factor=0.5, 
@@ -80,6 +81,7 @@ class Trainer():
         self.optimizer, self.scheduler = self.configure_optimizers(self.model.parameters())
         
         best_state = get_best_state()
+        # best_state = "mlp_best.pth"
 
         if best_state is not None:
             self.checkpoint = self.load_checkpoint(best_state)
@@ -100,7 +102,7 @@ class Trainer():
             self.scheduler.step(val_loss)
 
             current_lr = self.scheduler.get_last_lr()[0]
-            print(f"Current learning rate: {current_lr:.4f}")
+            print(f"Current learning rate: {current_lr:.2e}")
 
             if self.writer is not None:
                 # Log to TensorBoard

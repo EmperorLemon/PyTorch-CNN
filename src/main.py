@@ -33,19 +33,19 @@ def main() -> int:
     check_cuda()
 
     # Load the dataset
-    dataset = ImageDataset(FASHION_DATA_DIR, use_augmentation=True)
+    dataset = ImageDataset(FASHION_DATA_DIR)
     train_loader, val_loader, test_loader = dataset.get_dataloaders(batch_size=hyperparameters.get("batch_size"), num_workers=4)
 
     fc_layers: List[int] = [512, 256]
     output_size = len(dataset.class_names)
-    network_layers = create_mlp(IMAGE_CHANNELS * IMAGE_WIDTH * IMAGE_HEIGHT, fc_layers=fc_layers, num_classes=output_size)
+    # network_layers = create_mlp(IMAGE_CHANNELS * IMAGE_WIDTH * IMAGE_HEIGHT, fc_layers=fc_layers, num_classes=output_size)
 
     log_dir = get_log_dir()
     writer = SummaryWriter(log_dir=log_dir)
 
     # Create the model
-    model = Model(layers=network_layers)
-    # model = VGG16(num_classes=output_size)
+    # model = Model(layers=network_layers)
+    model = VGG16(num_classes=output_size)
     # model = PretrainedVGG16(num_classes=output_size)
 
     summary(model, input_size=(hyperparameters.get("batch_size"), IMAGE_CHANNELS, IMAGE_WIDTH, IMAGE_HEIGHT))
