@@ -1,5 +1,5 @@
 from torch import optim, no_grad, max
-from torch.utils.tensorboard.writer import SummaryWriter
+from tensorboardX import SummaryWriter
 from torch.amp import GradScaler, autocast
 from .model import Model, nn, cuda
 from .utils import save_state, load_state, get_best_state
@@ -10,7 +10,7 @@ import time
 
 class EarlyStopper():
     def __init__(self, 
-                 patience: int = 6,
+                 patience: int = 7,
                  min_delta: float = 0.0):
         self.patience = patience
         self.min_delta = min_delta
@@ -35,9 +35,8 @@ class Trainer():
                  criterion: Type[nn.Module] = nn.CrossEntropyLoss,
                  lr: float = 1e-3,
                  weight_decay: float = 1e-5,
-                 patience: int = 3,
+                 patience: int = 5,
                  min_delta: float = 1e-4,
-                 gradient_accumulation_steps: int = 1,
                  mixed_precision: bool = True,
                  device: str = "cuda" if cuda.is_available() else "cpu",
                  writer: Optional[Type[SummaryWriter]] = None):
@@ -48,12 +47,11 @@ class Trainer():
         self.weight_decay = weight_decay
         self.patience = patience
         self.min_delta = min_delta
-        self.gradient_accumulation_steps = gradient_accumulation_steps
         self.mixed_precision = mixed_precision
         self.device = device
         self.writer = writer if writer is not None else SummaryWriter()
         
-        self.early_stopper = EarlyStopper(patience=self.patience * 2 + 1, min_delta=self.min_delta)
+        self.early_stopper = EarlyStopper(patience=self.patience + 2, min_delta=self.min_delta)
         self.scaler = GradScaler() if self.mixed_precision else None
         
     ## Optimization algorithm
@@ -62,9 +60,9 @@ class Trainer():
         # optimizer = optim.Adam(params=model_params, lr=self.lr, weight_decay=self.weight_decay)
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer=optimizer, 
                                                          mode='min', 
-                                                         factor=0.5, 
+                                                         factor=3e-1, 
                                                          patience=self.patience,
-                                                         threshold=0.01,
+                                                         threshold=1e-3,
                                                          threshold_mode='rel',
                                                          cooldown=0,
                                                          min_lr=1e-6)
@@ -81,7 +79,6 @@ class Trainer():
         self.optimizer, self.scheduler = self.configure_optimizers(self.model.parameters())
         
         best_state = get_best_state()
-        # best_state = "mlp_best.pth"
 
         if best_state is not None:
             self.checkpoint = self.load_checkpoint(best_state)
@@ -96,7 +93,7 @@ class Trainer():
             train_loss = self.fit_epoch()
             val_loss, val_accuracy = self.validate()
             
-            print(f"Epoch {epoch+1}/{self.max_epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Val Accuracy: {val_accuracy:.2f}%\n")
+            print(f"Epoch {epoch}/{self.max_epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Val Accuracy: {val_accuracy:.2f}%\n")
 
             # Learning rate scheduling
             self.scheduler.step(val_loss)
@@ -112,13 +109,13 @@ class Trainer():
                 self.writer.add_scalar("Learning_Rate", current_lr, epoch)
 
             # Save best model
-            if val_loss < best_val_loss and (epoch + 1) % self.patience == 0:
+            if val_loss < best_val_loss and (epoch) % self.patience == 0:
                 best_val_loss = val_loss
                 self.save_checkpoint(epoch, train_loss=train_loss, val_loss=val_loss, val_accuracy=val_accuracy)
 
             self.early_stopper(val_loss=val_loss)
             if self.early_stopper.early_stop:
-                print(f"Early stopper triggered at epoch {epoch + 1}")
+                print(f"Early stopper triggered at epoch {epoch}")
                 break
 
         end_time = time.time()
@@ -142,7 +139,6 @@ class Trainer():
 
                 # Get loss for predicted outputs
                 loss = self.criterion(outputs, labels)
-                loss = loss / self.gradient_accumulation_steps
 
             # Backward and optimize
             if self.mixed_precision:
@@ -151,18 +147,17 @@ class Trainer():
                 # Get gradients W.R.T the parameters of the model
                 loss.backward()
 
-            if (i + 1) % self.gradient_accumulation_steps == 0:
-                if self.mixed_precision:
-                    self.scaler.step(self.optimizer)
-                    self.scaler.update()
-                else:
-                    # Update the parameters ((weights)) (perform optimization)
-                    self.optimizer.step()
+            if self.mixed_precision:
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+            else:
+                # Update the parameters ((weights)) (perform optimization)
+                self.optimizer.step()
 
-                # Clear gradient buffers
-                self.optimizer.zero_grad()
+            # Clear gradient buffers
+            self.optimizer.zero_grad()
 
-            total_loss += loss.item() * self.gradient_accumulation_steps
+            total_loss += loss.item()
             num_batches += 1
 
             # Update progress bar
@@ -218,9 +213,9 @@ class Trainer():
             "val_accuracy": val_accuracy
         }
         
-        save_state(checkpoint, f"ep={epoch+1}_tl={train_loss:.4f}_vl={val_loss:.4f}_va={val_accuracy:.2f}.pth")
+        save_state(checkpoint, f"ep={epoch}_tl={train_loss:.4f}_vl={val_loss:.4f}_va={val_accuracy:.2f}.pth")
         
-        print(f"Checkpoint saved at epoch {epoch+1}")
+        print(f"Checkpoint saved at epoch {epoch}")
 
     def load_checkpoint(self, checkpoint_path):
         checkpoint = load_state(checkpoint_path)
@@ -229,11 +224,10 @@ class Trainer():
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         
         epoch = checkpoint["epoch"]
-        # train_loss = checkpoint["train_loss"]
+        train_loss = checkpoint["train_loss"]
         val_loss = checkpoint["val_loss"]
         val_accuracy = checkpoint["val_accuracy"]
         
-        # print(f"Loaded checkpoint from epoch {epoch+1} with train loss {train_loss:.4f}, validation loss {val_loss:.4f}, and accuracy {val_accuracy:.2f}%")
-        print(f"Loaded checkpoint from epoch {epoch+1} validation loss {val_loss:.4f}, and accuracy {val_accuracy:.2f}%")
+        print(f"Loaded checkpoint from epoch {epoch} with train loss {train_loss:.4f}, validation loss {val_loss:.4f}, and accuracy {val_accuracy:.2f}%")
         
         return epoch

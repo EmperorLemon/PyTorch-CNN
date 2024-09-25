@@ -35,7 +35,7 @@ class ImageDataset(Dataset):
         # Training transforms
         self.train_transform = transforms.Compose([
             # Resize the image to a fixed size
-            transforms.Resize(self.img_size),
+            transforms.Resize((self.img_size, self.img_size)),
             # Randomly flip the image horizontally
             transforms.RandomHorizontalFlip(),  
             # Randomly rotate the image by up to 20 degrees
@@ -51,7 +51,7 @@ class ImageDataset(Dataset):
         # Validation and Test transforms (no augmentation)
         self.eval_transform = transforms.Compose([
             # Resize the image to a fixed size
-            transforms.Resize(self.img_size),
+            transforms.Resize((self.img_size, self.img_size)),
             # Convert the image to a PyTorch tensor
             transforms.ToTensor(),
             # Normalize the image (using ImageNet stats)
@@ -71,9 +71,6 @@ class ImageDataset(Dataset):
         self.test_dataset.dataset.transform = self.eval_transform
 
         self.class_names = self.full_dataset.classes
-
-        # Initialize cache
-        self.cache = {}
 
         self.diagnose_dataset()
 

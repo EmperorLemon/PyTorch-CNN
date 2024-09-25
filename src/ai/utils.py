@@ -29,7 +29,7 @@ def load_state(model_file: str, checkpoint: bool = True):
         model_path = os.path.abspath(os.path.join(MODEL_DIR, model_file))
         return load(model_path, map_location="cpu", weights_only=True)
 
-def get_best_state() -> str:
+def get_best_state() -> str | None:
     # Regex to match pattern
     pattern = r'ep=(\d+)_tl=([\d.]+)_vl=([\d.]+)_va=([\d.]+)\.pth'
 
