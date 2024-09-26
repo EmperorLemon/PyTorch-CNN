@@ -45,8 +45,8 @@ def main() -> int:
     writer = SummaryWriter(log_dir=log_dir)
 
     # Create the model
-    model = Model(layers=network_layers)
-    # model = VGG16(num_classes=output_size)
+    # model = Model(layers=network_layers)
+    model = VGG16(num_classes=output_size)
     # model = PretrainedVGG16(num_classes=output_size)
 
     # summary(model, input_size=(hyperparameters.get("batch_size"), IMAGE_CHANNELS, IMAGE_WIDTH, IMAGE_HEIGHT))

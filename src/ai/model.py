@@ -27,7 +27,7 @@ class VGG16(nn.Module):
                  device: str = "cuda" if cuda.is_available() else "cpu"):
         super(VGG16, self).__init__()
         
-        self.features = nn.Sequential(
+        self.encoder = nn.Sequential(
             # Block 1
                 # Conv layer 1
             nn.Conv2d(3, 64, kernel_size=3, padding=1),
@@ -96,15 +96,16 @@ class VGG16(nn.Module):
             nn.MaxPool2d(kernel_size=2, stride=2),
         )
         
-        self.avgpool = nn.AdaptiveAvgPool2d(7)
-        
         self.classifier = nn.Sequential(
+            nn.Flatten(),    
                 # FC layer 1
             nn.Linear(512 * 7 * 7, 4096),
+            nn.BatchNorm1d(4096),
             nn.ReLU(inplace=True),
             nn.Dropout(),
                 # FC layer 2
             nn.Linear(4096, 4096),
+            nn.BatchNorm1d(4096),
             nn.ReLU(inplace=True),
             nn.Dropout(),
                 # Output layer
@@ -114,25 +115,8 @@ class VGG16(nn.Module):
         self.device = TorchDevice(device)
         self.to(self.device)
 
-        self._initialize_weights()
-
-    def _initialize_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-                if m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
-            elif isinstance(m, nn.BatchNorm2d):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
-            elif isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, 0, 0.01)
-                nn.init.constant_(m.bias, 0)
-
     def forward(self, x):
-        x = self.features(x)
-        x = self.avgpool(x)
-        x = flatten(x, 1)
+        x = self.encoder(x)
         x = self.classifier(x)
         return x
     

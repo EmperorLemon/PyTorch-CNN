@@ -1,33 +1,34 @@
 from torch import optim, no_grad, max
 from tensorboardX import SummaryWriter
 from torch.amp import GradScaler, autocast
-from .model import Model, nn, cuda
+from .model import nn, cuda
 from .utils import save_state, load_state, get_best_state
 from typing import Type, Optional
 from tqdm import tqdm
 
 import time
 
-class EarlyStopper():
-    def __init__(self, 
-                 patience: int = 7,
-                 min_delta: float = 0.0):
+class EarlyStopper:
+    def __init__(self, patience: int = 7, min_delta: float = 0.0):
         self.patience = patience
         self.min_delta = min_delta
         self.counter = 0
         self.best_loss = float('inf')
         self.early_stop = False
+        self.best_state = None
 
-    def __call__(self, val_loss):
+    def __call__(self, val_loss, model_state):
         if val_loss < self.best_loss - self.min_delta:
             self.best_loss = val_loss
             self.counter = 0
+            self.best_state = model_state
         else:
             self.counter += 1
             self.countdown = self.patience - self.counter
             print(f"Epochs remaining before stopping early: {self.countdown}")
             if self.counter >= self.patience:
                 self.early_stop = True
+        return self.best_state
 
 class Trainer():
     def __init__(self, 
@@ -35,7 +36,7 @@ class Trainer():
                  criterion: Type[nn.Module] = nn.CrossEntropyLoss,
                  lr: float = 1e-3,
                  weight_decay: float = 1e-5,
-                 patience: int = 5,
+                 patience: int = 3,
                  min_delta: float = 1e-4,
                  mixed_precision: bool = True,
                  device: str = "cuda" if cuda.is_available() else "cpu",
@@ -50,21 +51,28 @@ class Trainer():
         self.mixed_precision = mixed_precision
         self.device = device
         self.writer = writer if writer is not None else SummaryWriter()
+        self.save_frequency = 3
         
-        self.early_stopper = EarlyStopper(patience=self.patience + 2, min_delta=self.min_delta)
+        self.early_stopper = EarlyStopper(patience=self.patience * 2, min_delta=self.min_delta)
         self.scaler = GradScaler() if self.mixed_precision else None
+        self.best_accuracy = 0.0
         
     ## Optimization algorithm
     def configure_optimizers(self, model_params):
-        optimizer = optim.SGD(params=model_params, lr=self.lr, weight_decay=self.weight_decay, momentum=0.9)
-        # optimizer = optim.Adam(params=model_params, lr=self.lr, weight_decay=self.weight_decay)
+        optimizer = optim.SGD(params=model_params, lr=self.lr, 
+                              weight_decay=self.weight_decay, 
+                              momentum=0.9, nesterov=True)
+        
+        # optimizer = optim.Adam(params=model_params, lr=self.lr, 
+        #                        weight_decay=self.weight_decay)
+        
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer=optimizer, 
                                                          mode='min', 
                                                          factor=3e-1, 
                                                          patience=self.patience,
-                                                         threshold=1e-3,
+                                                         threshold=1e-4,
                                                          threshold_mode='rel',
-                                                         cooldown=0,
+                                                         cooldown=2, # Add a small cooldown period  
                                                          min_lr=1e-6)
 
         return optimizer, scheduler
@@ -109,13 +117,14 @@ class Trainer():
                 self.writer.add_scalar("Learning_Rate", current_lr, epoch)
 
             # Save best model
-            if val_loss < best_val_loss and (epoch) % self.patience == 0:
+            if val_loss < best_val_loss and (epoch) % self.save_frequency == 0:
                 best_val_loss = val_loss
                 self.save_checkpoint(epoch, train_loss=train_loss, val_loss=val_loss, val_accuracy=val_accuracy)
 
-            self.early_stopper(val_loss=val_loss)
+            best_state = self.early_stopper(val_loss, self.model.state_dict())
             if self.early_stopper.early_stop:
-                print(f"Early stopper triggered at epoch {epoch}")
+                print(f"Early stopping triggered at epoch {epoch}")
+                self.model.load_state_dict(best_state)
                 break
 
         end_time = time.time()
@@ -128,7 +137,7 @@ class Trainer():
         self.model.train()
         progress_bar = tqdm(self.train_loader, desc="Training", leave=False)
         # Iterate and update network weights, compute loss
-        for i, (inputs, labels) in enumerate(progress_bar):
+        for inputs, labels in progress_bar:
             # Get inputs and the corresponding labels, move tensors to configured device
             inputs, labels = inputs.to(self.device), labels.to(self.device)
 
@@ -143,15 +152,14 @@ class Trainer():
             # Backward and optimize
             if self.mixed_precision:
                 self.scaler.scale(loss).backward()
-            else:
-                # Get gradients W.R.T the parameters of the model
-                loss.backward()
-
-            if self.mixed_precision:
+                self.scaler.unscale_(self.optimizer)
+                nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
             else:
-                # Update the parameters ((weights)) (perform optimization)
+                # Get gradients W.R.T the parameters of the model
+                loss.backward()
+                nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                 self.optimizer.step()
 
             # Clear gradient buffers
