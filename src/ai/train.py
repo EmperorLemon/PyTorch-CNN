@@ -32,12 +32,11 @@ class EarlyStopper:
 
 class Trainer():
     def __init__(self, 
-                 n_epochs : int,
-                 criterion: Type[nn.Module] = nn.CrossEntropyLoss,
-                 lr: float = 1e-3,
+                 n_epochs: int,
+                 lr: float,
                  weight_decay: float = 1e-5,
+                 criterion: Type[nn.Module] = nn.CrossEntropyLoss,
                  patience: int = 3,
-                 min_delta: float = 1e-4,
                  mixed_precision: bool = True,
                  device: str = "cuda" if cuda.is_available() else "cpu",
                  writer: Optional[Type[SummaryWriter]] = None):
@@ -47,24 +46,23 @@ class Trainer():
         self.lr = lr
         self.weight_decay = weight_decay
         self.patience = patience
-        self.min_delta = min_delta
         self.mixed_precision = mixed_precision
         self.device = device
         self.writer = writer if writer is not None else SummaryWriter()
         self.save_frequency = 3
         
-        self.early_stopper = EarlyStopper(patience=self.patience * 2, min_delta=self.min_delta)
+        self.early_stopper = EarlyStopper(patience=self.patience * 2, min_delta=1e-4)
         self.scaler = GradScaler() if self.mixed_precision else None
         self.best_accuracy = 0.0
         
     ## Optimization algorithm
     def configure_optimizers(self, model_params):
-        optimizer = optim.SGD(params=model_params, lr=self.lr, 
-                              weight_decay=self.weight_decay, 
-                              momentum=0.9, nesterov=True)
+        # optimizer = optim.SGD(params=model_params, lr=self.lr, 
+        #                       weight_decay=self.weight_decay, 
+        #                       momentum=0.9, nesterov=True)
         
-        # optimizer = optim.Adam(params=model_params, lr=self.lr, 
-        #                        weight_decay=self.weight_decay)
+        optimizer = optim.Adam(params=model_params, lr=self.lr, 
+                               weight_decay=self.weight_decay)
         
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer=optimizer, 
                                                          mode='min', 
@@ -72,7 +70,7 @@ class Trainer():
                                                          patience=self.patience,
                                                          threshold=1e-4,
                                                          threshold_mode='rel',
-                                                         cooldown=2, # Add a small cooldown period  
+                                                         cooldown=0,  
                                                          min_lr=1e-6)
 
         return optimizer, scheduler

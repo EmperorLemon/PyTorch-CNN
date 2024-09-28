@@ -32,6 +32,23 @@ class ImageDataset(Dataset):
         if torch.cuda.is_available():
             torch.cuda.manual_seed(self.random_seed)
 
+        self.full_dataset = datasets.ImageFolder(self.root_dir)
+        self.train_indices, self.val_indices, self.test_indices = self._stratified_split()
+
+        self.train_dataset = Subset(self.full_dataset, self.train_indices)
+        self.train_dataset.dataset.transform = self.train_transform
+
+        self.val_dataset = Subset(self.full_dataset, self.val_indices)
+        self.val_dataset.dataset.transform = self.eval_transform
+
+        self.test_dataset = Subset(self.full_dataset, self.test_indices)
+        self.test_dataset.dataset.transform = self.eval_transform
+
+        self.class_names = self.full_dataset.classes
+
+        self.diagnose_dataset()
+        
+    def _compose_transforms(self):
         # Training transforms
         self.train_transform = transforms.Compose([
             # Resize the image to a fixed size
@@ -58,23 +75,7 @@ class ImageDataset(Dataset):
             transforms.Normalize(mean=self.mean, std=self.std)
         ])
 
-        self.full_dataset = datasets.ImageFolder(self.root_dir)
-        self.train_indices, self.val_indices, self.test_indices = self.stratified_split()
-
-        self.train_dataset = Subset(self.full_dataset, self.train_indices)
-        self.train_dataset.dataset.transform = self.train_transform
-
-        self.val_dataset = Subset(self.full_dataset, self.val_indices)
-        self.val_dataset.dataset.transform = self.eval_transform
-
-        self.test_dataset = Subset(self.full_dataset, self.test_indices)
-        self.test_dataset.dataset.transform = self.eval_transform
-
-        self.class_names = self.full_dataset.classes
-
-        self.diagnose_dataset()
-
-    def stratified_split(self):
+    def _stratified_split(self):
         labels = [label for _, label in self.full_dataset.samples]
         
         # First, split off the test set

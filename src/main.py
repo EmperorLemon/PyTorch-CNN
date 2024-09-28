@@ -23,12 +23,6 @@ from utils import get_log_dir
 from config import hyperparameters
 from globals import *
 
-def train_model(model, trainer: Trainer, train_loader, val_loader):
-    trainer.fit(model=model, train_loader=train_loader, val_loader=val_loader)
-
-def test_model(test_loader, model):
-    evaluate_model(test_loader=test_loader, model=model)
-
 def main() -> int:
     check_cuda()
 
@@ -60,9 +54,11 @@ def main() -> int:
                       weight_decay=hyperparameters.get("weight_decay"), 
                       device=model.device, writer=writer)
 
-    train_model(model=model, trainer=trainer, train_loader=train_loader, val_loader=val_loader)
-
-    test_model(test_loader=test_loader, model=model)
+    # Train the model to fit the parameters
+    trainer.fit(model=model, train_loader=train_loader, val_loader=val_loader)
+    
+    # Evaluate the effectiveness of the model
+    evaluate_model(test_loader=test_loader, model=model)
 
     writer.flush()
     writer.close()

@@ -1,4 +1,4 @@
-from torch import nn, cuda, flatten
+from torch import nn, cuda
 from torch import device as TorchDevice
 from torchvision import models
 from collections import OrderedDict
@@ -95,20 +95,19 @@ class VGG16(nn.Module):
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2),
         )
+
         
         self.classifier = nn.Sequential(
             nn.Flatten(),    
                 # FC layer 1
-            nn.Linear(512 * 7 * 7, 4096),
-            nn.BatchNorm1d(4096),
+            nn.Linear(7 * 7 * 512, 4096),
             nn.ReLU(inplace=True),
             nn.Dropout(),
                 # FC layer 2
             nn.Linear(4096, 4096),
-            nn.BatchNorm1d(4096),
             nn.ReLU(inplace=True),
             nn.Dropout(),
-                # Output layer
+                # FC layer 3 (Output layer)
             nn.Linear(4096, num_classes),
         )
 
