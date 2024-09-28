@@ -27,13 +27,13 @@ def main() -> int:
 
     # Load the dataset
     dataset = ImageDataset(FASHION_DATA_DIR, 
-                           val_split=hyperparameters.get("valid_test_split")[0], 
-                           test_split=hyperparameters.get("valid_test_split")[1])
+                           val_split=hyperparameters.get("val_test_split")[0], 
+                           test_split=hyperparameters.get("val_test_split")[1])
     train_loader, val_loader, test_loader = dataset.get_dataloaders(batch_size=hyperparameters.get("batch_size"), num_workers=4)
 
     num_classes = len(dataset.class_names)
 
-    log_dir = get_log_dir(hyperparameters.get("model_type"))
+    log_dir = get_log_dir()
 
     model = None
 
@@ -49,16 +49,23 @@ def main() -> int:
     # summary(model, input_size=(hyperparameters.get("batch_size"), IMAGE_CHANNELS, IMAGE_WIDTH, IMAGE_HEIGHT))
     writer = SummaryWriter(log_dir=log_dir)
 
-    # Create the trainer
-    trainer = Trainer(n_epochs=hyperparameters.get("num_epochs"), 
-                      lr=hyperparameters.get("learning_rate"), 
-                      device=model.device, writer=writer)
+    if CURRENT_MODEL_MODE is ModelMode.TRAINING:
+        # Create the trainer
+        trainer = Trainer(n_epochs=hyperparameters.get("num_epochs"), 
+                        lr=hyperparameters.get("learning_rate"), 
+                        device=model.device, writer=writer)
 
-    # Train the model to fit the parameters
-    trainer.fit(model=model, train_loader=train_loader, val_loader=val_loader, optimizer=hyperparameters.get("optimizer"))
+        # Train the model to fit the parameters
+        trainer.fit(model=model, train_loader=train_loader, val_loader=val_loader, optim_type=hyperparameters.get("optim_type"), pretrained=False)
     
-    # Evaluate the effectiveness of the model
-    evaluate_model(test_loader=test_loader, model=model)
+        # Evaluate the effectiveness of the model
+        evaluate_model(model=model, test_loader=test_loader, writer=writer)
+    elif CURRENT_MODEL_MODE is ModelMode.INFERENCE:
+        model_state = load_state("best.pth", checkpoint=False)
+        model.load_state_dict(model_state["model_state_dict"])
+        
+        # Evaluate the effectiveness of the model
+        evaluate_model(model=model, test_loader=test_loader, writer=writer)
 
     writer.flush()
     writer.close()

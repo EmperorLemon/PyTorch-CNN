@@ -22,7 +22,7 @@ def prompt_user(model_path: str) -> int:
         print("Invalid choice. Training a new model.")
         return 0
     
-def get_log_dir(model_type: ModelType):
+def get_log_dir():
     base_dir = os.path.join(LOG_DIR, "runs")
     time_str = datetime.datetime.now().strftime("%d-%m-%Y--%H-%M-%S")
     
@@ -30,7 +30,7 @@ def get_log_dir(model_type: ModelType):
     params = "-".join(f"{key}={value}" for key, value in hyperparameters.items())
     
     # Join params and time_str
-    run_id = f"{str(model_type).lower()}--{params}--{time_str}"
+    run_id = f"{params}--{time_str}"
 
     return os.path.join(base_dir, run_id)
 

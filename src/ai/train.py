@@ -5,6 +5,7 @@ from torch.amp import GradScaler, autocast
 
 from .model import nn, cuda
 from .utils import get_best_state, load_checkpoint, save_checkpoint
+from .data import DataLoader
 
 from config import OptimizerType
 
@@ -54,11 +55,13 @@ class Trainer():
         self.writer = writer
         self.save_frequency = 3
         
-        self.early_stopper = EarlyStopper(patience=self.patience * 2, min_delta=1e-4)
+        self.early_stopper = EarlyStopper(patience=self.patience + 2, min_delta=1e-4)
         self.scaler = GradScaler() if self.mixed_precision else None
         
     ## Optimization algorithm
     def configure_optimizers(self, model_params, optim_type: OptimizerType):
+        
+        optimizer = None
         
         if optim_type == OptimizerType.SGD:
             optimizer = optim.SGD(params=model_params, lr=self.lr, momentum=0.9, nesterov=True)
@@ -67,25 +70,27 @@ class Trainer():
         
         # reduce the learning rate if the model's performance is shit
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer=optimizer, 
+                                                         factor=0.5,
                                                          patience=self.patience,  
                                                          min_lr=1e-6)
 
         return optimizer, scheduler
 
     ## Fitting step
-    def fit(self, model, train_loader, val_loader, optimizer):
+    def fit(self, model, train_loader: DataLoader, val_loader: DataLoader, optim_type: OptimizerType, pretrained: bool = True):
         self.model = model.to(self.device)
         self.train_loader = train_loader
         self.val_loader = val_loader
 
         # Configure the optimizer
-        self.optimizer, self.scheduler = self.configure_optimizers(self.model.parameters(), optimizer)
+        self.optimizer, self.scheduler = self.configure_optimizers(self.model.parameters(), optim_type=optim_type)
         
-        # Get the filepath of the best checkpoint state
-        best_state = get_best_state()
+        if pretrained:
+            # Get the filepath of the best checkpoint state
+            best_state = get_best_state()
 
-        if best_state is not None:
-            self.checkpoint = load_checkpoint(self.model, self.optimizer, best_state)
+            if best_state is not None:
+                self.checkpoint = load_checkpoint(self.model, self.optimizer, best_state)
 
         best_val_loss = float('inf')
         start_time = time.time()

@@ -16,7 +16,7 @@ class MLP(nn.Module):
         layers.append(nn.Flatten())
         for hidden_size in hidden_layers:
             layers.append(nn.Linear(in_features, hidden_size))
-            layers.append(nn.BatchNorm1d(hidden_size))
+            layers.append(nn.LayerNorm(hidden_size))
             layers.append(nn.ReLU())
             layers.append(nn.Dropout())
             
