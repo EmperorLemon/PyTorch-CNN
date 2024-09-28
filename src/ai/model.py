@@ -1,20 +1,32 @@
 from torch import nn, cuda
 from torch import device as TorchDevice
 from torchvision import models
-from collections import OrderedDict
-from typing import List, Any, NamedTuple
+from typing import List
 
-## A network model
-class Model(nn.Module):
-    def __init__(self, 
-                 layers: nn.Sequential,
+class MLP(nn.Module):
+    def __init__(self,
+                 input_size: int, 
+                 hidden_layers: List[int],
+                 num_classes: int,
                  device: str = "cuda" if cuda.is_available() else "cpu"):
-        super(Model, self).__init__()
+        super(MLP, self).__init__()
+        
+        layers = []
+        in_features = input_size
+        layers.append(nn.Flatten())
+        for hidden_size in hidden_layers:
+            layers.append(nn.Linear(in_features, hidden_size))
+            layers.append(nn.BatchNorm1d(hidden_size))
+            layers.append(nn.ReLU())
+            layers.append(nn.Dropout())
+            
+            in_features = hidden_size
+        
+        layers.append(nn.Linear(in_features, num_classes))
+        self.net = nn.Sequential(*layers)
 
         self.device = TorchDevice(device)
         self.to(self.device)
-
-        self.net = layers
 
     ## Forward step
     def forward(self, X):
@@ -28,74 +40,12 @@ class VGG16(nn.Module):
         super(VGG16, self).__init__()
         
         self.encoder = nn.Sequential(
-            # Block 1
-                # Conv layer 1
-            nn.Conv2d(3, 64, kernel_size=3, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
-                # Conv layer 2
-            nn.Conv2d(64, 64, kernel_size=3, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            
-            # Block 2
-                # Conv layer 1
-            nn.Conv2d(64, 128, kernel_size=3, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True),
-                # Conv layer 2
-            nn.Conv2d(128, 128, kernel_size=3, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            
-            # Block 3
-                # Conv layer 1
-            nn.Conv2d(128, 256, kernel_size=3, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True),
-                # Conv layer 2
-            nn.Conv2d(256, 256, kernel_size=3, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True),
-                # Conv layer 3
-            nn.Conv2d(256, 256, kernel_size=3, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            
-            # Block 4
-                # Conv layer 1
-            nn.Conv2d(256, 512, kernel_size=3, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(inplace=True),
-                # Conv layer 2
-            nn.Conv2d(512, 512, kernel_size=3, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(inplace=True),
-                # Conv layer 3
-            nn.Conv2d(512, 512, kernel_size=3, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            
-            # Block 5
-                # Conv layer 1
-            nn.Conv2d(512, 512, kernel_size=3, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(inplace=True),
-                # Conv layer 2
-            nn.Conv2d(512, 512, kernel_size=3, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(inplace=True),
-                # Conv layer 3
-            nn.Conv2d(512, 512, kernel_size=3, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
+            self._conv_block(3, 64, 2), # 2 x conv layers (2)
+            self._conv_block(64, 128, 2), # 2 x conv layers (4)
+            self._conv_block(128, 256, 3), # 3 x conv layers (7)
+            self._conv_block(256, 512, 3), # 3 x conv layers (10)
+            self._conv_block(512, 512, 3), # 3 x conv layers (13)
         )
-
         
         self.classifier = nn.Sequential(
             nn.Flatten(),    
@@ -110,17 +60,33 @@ class VGG16(nn.Module):
                 # FC layer 3 (Output layer)
             nn.Linear(4096, num_classes),
         )
-
+        
         self.device = TorchDevice(device)
         self.to(self.device)
+        
+    def _conv_block(self, in_channels, out_channels, num_convs):
+        layers = []
+        
+        for _ in range(num_convs):
+            layers.append(nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1))
+            layers.append(nn.BatchNorm2d(out_channels))
+            layers.append(nn.ReLU(inplace=True))
+            in_channels = out_channels
+        
+        layers.append(nn.MaxPool2d(kernel_size=2, stride=2))
+        
+        return nn.Sequential(*layers)
 
-    def forward(self, x):
-        x = self.encoder(x)
-        x = self.classifier(x)
+
+    def forward(self, X):
+        x = self.encoder(X.to(self.device))
+        x = self.classifier(X.to(self.device))
+        
         return x
     
 class PretrainedVGG16(nn.Module):
-    def __init__(self, num_classes, 
+    def __init__(self, 
+                 num_classes: int, 
                  freeze_features: bool = True, 
                  device: str = "cuda" if cuda.is_available() else "cpu"):
         super(PretrainedVGG16, self).__init__()
@@ -140,5 +106,5 @@ class PretrainedVGG16(nn.Module):
         self.device = TorchDevice(device)
         self.to(self.device)
         
-    def forward(self, x):
-        return self.vgg16(x)
+    def forward(self, X):
+        return self.vgg16(X.to(self.device))

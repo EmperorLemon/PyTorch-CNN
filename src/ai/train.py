@@ -1,8 +1,13 @@
 from torch import optim, no_grad, max
+
 from tensorboardX import SummaryWriter
 from torch.amp import GradScaler, autocast
+
 from .model import nn, cuda
-from .utils import save_state, load_state, get_best_state
+from .utils import get_best_state, load_checkpoint, save_checkpoint
+
+from config import OptimizerType
+
 from typing import Type, Optional
 from tqdm import tqdm
 
@@ -34,7 +39,6 @@ class Trainer():
     def __init__(self, 
                  n_epochs: int,
                  lr: float,
-                 weight_decay: float = 1e-5,
                  criterion: Type[nn.Module] = nn.CrossEntropyLoss,
                  patience: int = 3,
                  mixed_precision: bool = True,
@@ -44,50 +48,44 @@ class Trainer():
         self.max_epochs = n_epochs
         self.criterion = criterion()
         self.lr = lr
-        self.weight_decay = weight_decay
         self.patience = patience
         self.mixed_precision = mixed_precision
         self.device = device
-        self.writer = writer if writer is not None else SummaryWriter()
+        self.writer = writer
         self.save_frequency = 3
         
         self.early_stopper = EarlyStopper(patience=self.patience * 2, min_delta=1e-4)
         self.scaler = GradScaler() if self.mixed_precision else None
-        self.best_accuracy = 0.0
         
     ## Optimization algorithm
-    def configure_optimizers(self, model_params):
-        # optimizer = optim.SGD(params=model_params, lr=self.lr, 
-        #                       weight_decay=self.weight_decay, 
-        #                       momentum=0.9, nesterov=True)
+    def configure_optimizers(self, model_params, optim_type: OptimizerType):
         
-        optimizer = optim.Adam(params=model_params, lr=self.lr, 
-                               weight_decay=self.weight_decay)
+        if optim_type == OptimizerType.SGD:
+            optimizer = optim.SGD(params=model_params, lr=self.lr, momentum=0.9, nesterov=True)
+        elif optim_type == OptimizerType.ADAM:
+            optimizer = optim.Adam(params=model_params, lr=self.lr)
         
+        # reduce the learning rate if the model's performance is shit
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer=optimizer, 
-                                                         mode='min', 
-                                                         factor=3e-1, 
-                                                         patience=self.patience,
-                                                         threshold=1e-4,
-                                                         threshold_mode='rel',
-                                                         cooldown=0,  
+                                                         patience=self.patience,  
                                                          min_lr=1e-6)
 
         return optimizer, scheduler
 
     ## Fitting step
-    def fit(self, model, train_loader, val_loader):
+    def fit(self, model, train_loader, val_loader, optimizer):
         self.model = model.to(self.device)
         self.train_loader = train_loader
         self.val_loader = val_loader
 
         # Configure the optimizer
-        self.optimizer, self.scheduler = self.configure_optimizers(self.model.parameters())
+        self.optimizer, self.scheduler = self.configure_optimizers(self.model.parameters(), optimizer)
         
+        # Get the filepath of the best checkpoint state
         best_state = get_best_state()
 
         if best_state is not None:
-            self.checkpoint = self.load_checkpoint(best_state)
+            self.checkpoint = load_checkpoint(self.model, self.optimizer, best_state)
 
         best_val_loss = float('inf')
         start_time = time.time()
@@ -108,16 +106,19 @@ class Trainer():
             print(f"Current learning rate: {current_lr:.2e}")
 
             if self.writer is not None:
-                # Log to TensorBoard
+                # Log to TensorBoardX
                 self.writer.add_scalar("Loss/Train", train_loss, epoch)
                 self.writer.add_scalar("Loss/Validation", val_loss, epoch)
                 self.writer.add_scalar("Accuracy/Validation", val_accuracy, epoch)
                 self.writer.add_scalar("Learning_Rate", current_lr, epoch)
 
-            # Save best model
+            # Save best model if the validation loss is less than the current lowest val loss.
+            # Also, the best model is saved every 3 or 5 epochs (depends what the save frequency is)
             if val_loss < best_val_loss and (epoch) % self.save_frequency == 0:
                 best_val_loss = val_loss
-                self.save_checkpoint(epoch, train_loss=train_loss, val_loss=val_loss, val_accuracy=val_accuracy)
+                save_checkpoint(self.model, self.optimizer, 
+                                epoch, train_loss=train_loss, 
+                                val_loss=val_loss, val_accuracy=val_accuracy)
 
             best_state = self.early_stopper(val_loss, self.model.state_dict())
             if self.early_stopper.early_stop:
@@ -147,7 +148,7 @@ class Trainer():
                 # Get loss for predicted outputs
                 loss = self.criterion(outputs, labels)
 
-            # Backward and optimize
+            # Backward and optimize (backpropigation)
             if self.mixed_precision:
                 self.scaler.scale(loss).backward()
                 self.scaler.unscale_(self.optimizer)
@@ -208,32 +209,3 @@ class Trainer():
         accuracy = 100 * correct / total
 
         return val_loss, accuracy
-    
-    def save_checkpoint(self, epoch, train_loss, val_loss, val_accuracy):
-        checkpoint = {
-            "epoch": epoch,
-            "model_state_dict": self.model.state_dict(),
-            "optimizer_state_dict": self.optimizer.state_dict(),
-            "train_loss": train_loss,
-            "val_loss": val_loss,
-            "val_accuracy": val_accuracy
-        }
-        
-        save_state(checkpoint, f"ep={epoch}_tl={train_loss:.4f}_vl={val_loss:.4f}_va={val_accuracy:.2f}.pth")
-        
-        print(f"Checkpoint saved at epoch {epoch}")
-
-    def load_checkpoint(self, checkpoint_path):
-        checkpoint = load_state(checkpoint_path)
-        
-        self.model.load_state_dict(checkpoint["model_state_dict"])
-        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        
-        epoch = checkpoint["epoch"]
-        train_loss = checkpoint["train_loss"]
-        val_loss = checkpoint["val_loss"]
-        val_accuracy = checkpoint["val_accuracy"]
-        
-        print(f"Loaded checkpoint from epoch {epoch} with train loss {train_loss:.4f}, validation loss {val_loss:.4f}, and accuracy {val_accuracy:.2f}%")
-        
-        return epoch

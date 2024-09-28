@@ -53,3 +53,32 @@ def get_best_state() -> str | None:
                 best_state = filename
 
     return best_state
+
+def save_checkpoint(model, optimizer, epoch, train_loss, val_loss, val_accuracy):
+    checkpoint = {
+        "epoch": epoch,
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "train_loss": train_loss,
+        "val_loss": val_loss,
+        "val_accuracy": val_accuracy
+    }
+    
+    save_state(checkpoint, f"ep={epoch}_tl={train_loss:.4f}_vl={val_loss:.4f}_va={val_accuracy:.2f}.pth")
+    
+    print(f"Checkpoint saved at epoch {epoch}")
+
+def load_checkpoint(model, optimizer, checkpoint_path):
+    checkpoint = load_state(checkpoint_path)
+    
+    model.load_state_dict(checkpoint["model_state_dict"])
+    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    
+    epoch = checkpoint["epoch"]
+    train_loss = checkpoint["train_loss"]
+    val_loss = checkpoint["val_loss"]
+    val_accuracy = checkpoint["val_accuracy"]
+    
+    print(f"Loaded checkpoint from epoch {epoch} with train loss {train_loss:.4f}, validation loss {val_loss:.4f}, and accuracy {val_accuracy:.2f}%")
+    
+    return epoch

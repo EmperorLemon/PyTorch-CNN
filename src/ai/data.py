@@ -3,8 +3,6 @@ from torchvision import datasets, transforms
 from collections import Counter
 from sklearn.model_selection import train_test_split
 
-import os
-import numpy as np
 import torch
 
 class ImageDataset(Dataset):
@@ -27,6 +25,8 @@ class ImageDataset(Dataset):
         self.test_split = test_split
 
         self.random_seed = random_seed
+        
+        self._compose_transforms()
 
         torch.manual_seed(self.random_seed)
         if torch.cuda.is_available():
