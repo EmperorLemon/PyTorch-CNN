@@ -14,11 +14,11 @@ class OptimizerType(Enum):
     ADAM = 1
     
 hyperparameters: dict = {
-    "batch_size": 64,
+    "batch_size": 32,
     "val_test_split": [0.2, 0.1], # 20% validation, 10% testing 
-    "model_type": ModelType.MLP,
-    "hidden_layers": [1024, 512], # Only used in MLP
-    "learning_rate": 3e-3,
+    "model_type": ModelType.VGG16,
+    "hidden_layers": [512, 256], # Only used in MLP
+    "learning_rate": 5e-4,
     "num_epochs": 100,
     "optim_type": OptimizerType.SGD,
 }

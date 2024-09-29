@@ -119,11 +119,13 @@ class Trainer():
 
             # Save best model if the validation loss is less than the current lowest val loss.
             # Also, the best model is saved every 3 or 5 epochs (depends what the save frequency is)
-            if val_loss < best_val_loss and (epoch) % self.save_frequency == 0:
+            if val_loss < best_val_loss:
                 best_val_loss = val_loss
-                save_checkpoint(self.model, self.optimizer, 
-                                epoch, train_loss=train_loss, 
-                                val_loss=val_loss, val_accuracy=val_accuracy)
+                
+                if epoch % self.save_frequency == 0:
+                    save_checkpoint(self.model, self.optimizer, 
+                                    epoch, train_loss=train_loss, 
+                                    val_loss=val_loss, val_accuracy=val_accuracy)
 
             best_state = self.early_stopper(val_loss, self.model.state_dict())
             if self.early_stopper.early_stop:

@@ -47,6 +47,8 @@ class VGG16(nn.Module):
             self._conv_block(512, 512, 3), # 3 x conv layers (13)
         )
         
+        self.avg_pool = nn.AdaptiveAvgPool2d((7,7))
+        
         self.classifier = nn.Sequential(
             nn.Flatten(),    
                 # FC layer 1
@@ -80,7 +82,8 @@ class VGG16(nn.Module):
 
     def forward(self, X):
         x = self.encoder(X.to(self.device))
-        x = self.classifier(X.to(self.device))
+        x = self.avg_pool(x)
+        x = self.classifier(x)
         
         return x
     
