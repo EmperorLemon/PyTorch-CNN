@@ -12,12 +12,12 @@ from ai.train import Trainer
 from ai.data import ImageDataset
 from ai.utils import check_cuda, load_state
 from ai.test import evaluate_model
+from ai.visualizer import visualize_results
 
 from torchinfo import summary
 
 from tensorboardX import SummaryWriter
 
-from typing import List
 from utils import get_log_dir
 from config import *
 from globals import *
@@ -53,19 +53,22 @@ def main() -> int:
         # Create the trainer
         trainer = Trainer(n_epochs=hyperparameters.get("num_epochs"), 
                         lr=hyperparameters.get("learning_rate"), 
+                        weight_decay=hyperparameters.get("weight_decay"),
                         device=model.device, writer=writer)
 
         # Train the model to fit the parameters
         trainer.fit(model=model, train_loader=train_loader, val_loader=val_loader, optim_type=hyperparameters.get("optim_type"), pretrained=False)
     
         # Evaluate the effectiveness of the model
-        evaluate_model(model=model, test_loader=test_loader, writer=writer)
+        conf_matrix, mae = evaluate_model(model=model, test_loader=test_loader)
+        visualize_results(conf_matrix, mae, writer=writer)
     elif CURRENT_MODEL_MODE is ModelMode.INFERENCE:
         model_state = load_state("best.pth", checkpoint=False)
         model.load_state_dict(model_state["model_state_dict"])
         
         # Evaluate the effectiveness of the model
-        evaluate_model(model=model, test_loader=test_loader, writer=writer)
+        conf_matrix, mae = evaluate_model(model=model, test_loader=test_loader)
+        visualize_results(conf_matrix, mae, writer=writer)
 
     writer.flush()
     writer.close()

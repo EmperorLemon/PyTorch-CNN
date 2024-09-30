@@ -40,6 +40,7 @@ class Trainer():
     def __init__(self, 
                  n_epochs: int,
                  lr: float,
+                 weight_decay: float,
                  criterion: Type[nn.Module] = nn.CrossEntropyLoss,
                  patience: int = 3,
                  mixed_precision: bool = True,
@@ -49,6 +50,7 @@ class Trainer():
         self.max_epochs = n_epochs
         self.criterion = criterion()
         self.lr = lr
+        self.weight_decay = weight_decay
         self.patience = patience
         self.mixed_precision = mixed_precision
         self.device = device
@@ -64,9 +66,11 @@ class Trainer():
         optimizer = None
         
         if optim_type == OptimizerType.SGD:
-            optimizer = optim.SGD(params=model_params, lr=self.lr, momentum=0.9, nesterov=True)
+            optimizer = optim.SGD(params=model_params, lr=self.lr, momentum=0.9, 
+                                  weight_decay=self.weight_decay, nesterov=True)
         elif optim_type == OptimizerType.ADAM:
-            optimizer = optim.Adam(params=model_params, lr=self.lr)
+            optimizer = optim.Adam(params=model_params, lr=self.lr, 
+                                   weight_decay=self.weight_decay)
         
         # reduce the learning rate if the model's performance is shit
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer=optimizer, 
@@ -147,6 +151,9 @@ class Trainer():
             # Get inputs and the corresponding labels, move tensors to configured device
             inputs, labels = inputs.to(self.device), labels.to(self.device)
 
+            # Clear gradient buffers
+            self.optimizer.zero_grad()
+
             # Forward pass
             with autocast(device_type=self.model.device.type, enabled=self.mixed_precision):
                 # Get output from model, given the inputs
@@ -154,28 +161,25 @@ class Trainer():
 
                 # Get loss for predicted outputs
                 loss = self.criterion(outputs, labels)
-
+            
             # Backward and optimize (backpropigation)
             if self.mixed_precision:
                 self.scaler.scale(loss).backward()
-                self.scaler.unscale_(self.optimizer)
-                nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+                # self.scaler.unscale_(self.optimizer)
+                # nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
             else:
                 # Get gradients W.R.T the parameters of the model
                 loss.backward()
-                nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+                # nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                 self.optimizer.step()
-
-            # Clear gradient buffers
-            self.optimizer.zero_grad()
 
             total_loss += loss.item()
             num_batches += 1
 
             # Update progress bar
-            progress_bar.set_postfix({'loss': f'{loss.item():.4f}'})
+            progress_bar.set_postfix({"loss": f"{loss.item():.4f}"})
 
             del inputs, labels, outputs
         
@@ -206,8 +210,8 @@ class Trainer():
                 # Update progress bar
                 current_accuracy = 100 * correct / total
                 progress_bar.set_postfix({
-                    'loss': f'{total_loss / (progress_bar.n + 1):.4f}',
-                    'accuracy': f'{current_accuracy:.2f}%'
+                    "loss": f"{total_loss / (progress_bar.n + 1):.4f}",
+                    "accuracy": f"{current_accuracy:.2f}%"
                 })
 
                 del inputs, labels, outputs

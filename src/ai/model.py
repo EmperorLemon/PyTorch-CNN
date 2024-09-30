@@ -31,7 +31,7 @@ class MLP(nn.Module):
     ## Forward step
     def forward(self, X):
         # Compute output given an input X
-        return self.net(X.to(self.device))
+        return self.net(X)
     
 class VGG16(nn.Module):
     def __init__(self, 
@@ -39,20 +39,22 @@ class VGG16(nn.Module):
                  device: str = "cuda" if cuda.is_available() else "cpu"):
         super(VGG16, self).__init__()
         
-        self.encoder = nn.Sequential(
-            self._conv_block(3, 64, 2), # 2 x conv layers (2)
-            self._conv_block(64, 128, 2), # 2 x conv layers (4)
-            self._conv_block(128, 256, 3), # 3 x conv layers (7)
-            self._conv_block(256, 512, 3), # 3 x conv layers (10)
-            self._conv_block(512, 512, 3), # 3 x conv layers (13)
-        )
+        layers = []
+        
+        self._conv_block(layers, 3, 64, 2), # 2 x conv layers (2)
+        self._conv_block(layers, 64, 128, 2), # 2 x conv layers (4)
+        self._conv_block(layers, 128, 256, 3), # 3 x conv layers (7)
+        self._conv_block(layers, 256, 512, 3), # 3 x conv layers (10)
+        self._conv_block(layers, 512, 512, 3), # 3 x conv layers (13)
+        
+        self.encoder = nn.Sequential(*layers)
         
         self.avg_pool = nn.AdaptiveAvgPool2d((7,7))
         
         self.classifier = nn.Sequential(
             nn.Flatten(),    
                 # FC layer 1
-            nn.Linear(7 * 7 * 512, 4096),
+            nn.Linear(512 * 7 * 7, 4096),
             nn.ReLU(inplace=True),
             nn.Dropout(),
                 # FC layer 2
@@ -66,8 +68,7 @@ class VGG16(nn.Module):
         self.device = TorchDevice(device)
         self.to(self.device)
         
-    def _conv_block(self, in_channels, out_channels, num_convs):
-        layers = []
+    def _conv_block(self, layers, in_channels, out_channels, num_convs):
         
         for _ in range(num_convs):
             layers.append(nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1))
@@ -76,12 +77,10 @@ class VGG16(nn.Module):
             in_channels = out_channels
         
         layers.append(nn.MaxPool2d(kernel_size=2, stride=2))
-        
-        return nn.Sequential(*layers)
 
 
     def forward(self, X):
-        x = self.encoder(X.to(self.device))
+        x = self.encoder(X)
         x = self.avg_pool(x)
         x = self.classifier(x)
         
@@ -110,4 +109,4 @@ class PretrainedVGG16(nn.Module):
         self.to(self.device)
         
     def forward(self, X):
-        return self.vgg16(X.to(self.device))
+        return self.vgg16(X)

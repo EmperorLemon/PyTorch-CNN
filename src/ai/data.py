@@ -24,6 +24,7 @@ class ImageDataset(Dataset):
         self.val_split = val_split
         self.test_split = test_split
 
+        # 42 is the meaning of everything
         self.random_seed = random_seed
         
         self._compose_transforms()
@@ -78,7 +79,7 @@ class ImageDataset(Dataset):
     def _stratified_split(self):
         labels = [label for _, label in self.full_dataset.samples]
         
-        # First, split off the test set
+        # Split off test set
         train_val_indices, test_indices = train_test_split(
             range(len(self.full_dataset)),
             test_size=self.test_split,
@@ -86,7 +87,7 @@ class ImageDataset(Dataset):
             random_state=self.random_seed
         )
         
-        # Then split the remaining data into train and validation sets
+        # Split remaining data into train and validation sets
         train_val_labels = [labels[i] for i in train_val_indices]
         train_indices, val_indices = train_test_split(
             train_val_indices,
