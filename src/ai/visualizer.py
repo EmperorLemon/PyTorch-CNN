@@ -1,10 +1,11 @@
 import matplotlib.pyplot as plt
 plt.switch_backend('agg')
 
+from torchvision.utils import make_grid
 from tensorboardX import SummaryWriter
 import seaborn as sns
 
-def visualize_results(conf_matrix, mae, writer: SummaryWriter):
+def visualize_results(model, test_loader, conf_matrix, mae, writer: SummaryWriter):    
     # Print results
     print("\nConfusion Matrix:")
     print(conf_matrix)
@@ -25,3 +26,10 @@ def visualize_results(conf_matrix, mae, writer: SummaryWriter):
 
     writer.add_figure("Confusion Matrix", fig)
     plt.close(fig)
+    
+    dataiter = iter(test_loader)
+    images, labels = next(dataiter)
+    
+    images = images.to(model.device)
+    
+    writer.add_graph(model, images)

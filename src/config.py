@@ -16,12 +16,13 @@ class OptimizerType(Enum):
 hyperparameters: dict = {
     "batch_size": 32,
     "val_test_split": [0.2, 0.1], # 20% validation, 10% testing 
-    "model_type": ModelType.MLP,
-    "hidden_layers": [512, 256], # Only used in MLP
-    "learning_rate": 1e-3,
-    "weight_decay": 1e-5,
+    "model_type": ModelType.VGG16,
+    "hidden_layers": [256, 128], # Only used in MLP
+    "dropout_rate": 0.5,
+    "learning_rate": 5e-4,
+    "weight_decay": 1e-9,
     "num_epochs": 100,
-    "optim_type": OptimizerType.ADAM,
+    "optim_type": OptimizerType.SGD,
 }
 
-CURRENT_MODEL_MODE = ModelMode.TRAINING
+CURRENT_MODEL_MODE = ModelMode.INFERENCE

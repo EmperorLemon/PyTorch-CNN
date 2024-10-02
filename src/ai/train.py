@@ -57,7 +57,7 @@ class Trainer():
         self.writer = writer
         self.save_frequency = 3
         
-        self.early_stopper = EarlyStopper(patience=self.patience + 2, min_delta=1e-4)
+        self.early_stopper = EarlyStopper(patience=self.patience * 2, min_delta=1e-4)
         self.scaler = GradScaler() if self.mixed_precision else None
         
     ## Optimization algorithm
@@ -134,6 +134,8 @@ class Trainer():
             best_state = self.early_stopper(val_loss, self.model.state_dict())
             if self.early_stopper.early_stop:
                 print(f"Early stopping triggered at epoch {epoch}")
+                save_checkpoint(self.model, self.optimizer, epoch, train_loss=train_loss,
+                                val_loss=val_loss, val_accuracy=val_accuracy)
                 self.model.load_state_dict(best_state)
                 break
 

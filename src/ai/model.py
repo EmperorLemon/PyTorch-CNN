@@ -8,6 +8,7 @@ class MLP(nn.Module):
                  input_size: int, 
                  hidden_layers: List[int],
                  num_classes: int,
+                 dropout_rate: float,
                  device: str = "cuda" if cuda.is_available() else "cpu"):
         super(MLP, self).__init__()
         
@@ -18,7 +19,7 @@ class MLP(nn.Module):
             layers.append(nn.Linear(in_features, hidden_size))
             layers.append(nn.LayerNorm(hidden_size))
             layers.append(nn.ReLU())
-            layers.append(nn.Dropout())
+            layers.append(nn.Dropout(dropout_rate))
             
             in_features = hidden_size
         
@@ -35,7 +36,8 @@ class MLP(nn.Module):
     
 class VGG16(nn.Module):
     def __init__(self, 
-                 num_classes: int, 
+                 num_classes: int,
+                 dropout_rate: float, 
                  device: str = "cuda" if cuda.is_available() else "cpu"):
         super(VGG16, self).__init__()
         
@@ -56,11 +58,11 @@ class VGG16(nn.Module):
                 # FC layer 1
             nn.Linear(512 * 7 * 7, 4096),
             nn.ReLU(inplace=True),
-            nn.Dropout(),
+            nn.Dropout(dropout_rate),
                 # FC layer 2
             nn.Linear(4096, 4096),
             nn.ReLU(inplace=True),
-            nn.Dropout(),
+            nn.Dropout(dropout_rate),
                 # FC layer 3 (Output layer)
             nn.Linear(4096, num_classes),
         )
@@ -89,17 +91,15 @@ class VGG16(nn.Module):
 class PretrainedVGG16(nn.Module):
     def __init__(self, 
                  num_classes: int, 
-                 freeze_features: bool = True, 
                  device: str = "cuda" if cuda.is_available() else "cpu"):
         super(PretrainedVGG16, self).__init__()
         
         # Load pretrained VGG16 model
         self.vgg16 = models.vgg16(pretrained=True)
         
-        if freeze_features:
-            # Freeze the features layers
-            for param in self.vgg16.features.parameters():
-                param.requires_grad = False
+        # Freeze the features layers
+        for param in self.vgg16.features.parameters():
+            param.requires_grad = False
         
         # Replace the last fully connected layer
         num_features = self.vgg16.classifier[6].in_features
