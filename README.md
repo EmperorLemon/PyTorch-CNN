@@ -1,2 +1,3 @@
-# ICT303-A1
+# Demonstrate Convolution Neural Networks using PyTorch 
+> A university AI unit assignment
  
